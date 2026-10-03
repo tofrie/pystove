@@ -80,14 +80,18 @@ contract. The tests use synthetic responses, not captured hardware fixtures.
 hashes, all original runtime hashes and the historical H3 approval. The separate
 H4 approval pins the reviewed `pystove.py` hash and an independent H3-base byte
 hash outside `get_data()`'s body. H3 cleanup, module imports, signatures, constants,
-transport and every other method remain frozen. `__init__.py` and the CLI remain
+transport and every other method remain frozen by that historical approval.
+The H6 approval separately pins the complete H4 source: only its new parser and
+four exact response return expressions may differ. Request construction remains
+byte for byte unchanged, including inside those four setters. `__init__.py` and the CLI remain
 byte for byte unchanged; the development version remains `0.3a2.dev0`.
 
 `test_status_validation.py` includes the original 0.3a1 `get_data()` source as a
 SHA-256-checked literal. Its valid-fixture comparisons check each of the 25 keys,
 values and exact types, including successful legacy edge cases. All 29 H3
 regressions remain; the eleven former H4 expected failures now assert `None`.
-The other eleven strict expected failures are unchanged.
+After the H6 POST response follow-up, two more cases are regular regressions;
+the remaining nine strict expected failures are unchanged.
 
 Ruff only checks files. The narrow CLI suppressions preserve existing import and
 string-formatting style without excluding the CLI from other lint rules. The
@@ -96,11 +100,19 @@ pyupgrade hooks are not installed. New test/build files receive the normal rules
 
 ## Phase boundary
 
-The runtime fixes after Phase 1 are H3 initialization cleanup and H4 status input
-validation. H4 changes only `get_data()` failure handling; its successful
-conversions remain compatible. No network, timeout, retry, protocol, HTTP, command,
-live-data, self-test or file-operation defects are fixed. Runtime dependencies and
+The runtime fixes after Phase 1 are H3 initialization cleanup, H4 status input
+validation and H6 POST response JSON validation. H4 changes only `get_data()`
+failure handling; its successful conversions remain compatible. H6 changes only
+malformed/non-object confirmations for four POST setters. No network, timeout,
+retry, protocol, HTTP-status, live-data, self-test or file-operation defects are fixed. Runtime dependencies and
 the HA integration remain unchanged. Exact validation, logging and limitations
 are recorded in [BASELINE.md](BASELINE.md#h4-follow-up). The workflow contains no
-publishing, deployment or secret-dependent steps. H3/H4 are checked without
+publishing, deployment or secret-dependent steps. H3/H4 and the narrow H6 parser scope are checked without
 hardware; later communication changes still need the hardware gates from the audit.
+
+
+The H6 checks are in `tests/test_post_response_validation.py` and run against the
+installed wheel too. `tests/fixtures/h4_commands.json` preserves the six H4
+command methods with a pinned fixture hash for direct comparisons. See
+[H6 POST response follow-up](BASELINE.md#h6-post-response-follow-up) for exact
+failure semantics and scope. No new runtime dependency is required.

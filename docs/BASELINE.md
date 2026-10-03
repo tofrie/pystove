@@ -493,3 +493,52 @@ request payloads/serialization, headers, timeouts, retries and successful
 request order are unchanged. No Home Assistant files or dependencies change.
 The integration's existing `data is None` branch handles failed status retrieval.
 No hardware access is needed for these synthetic-data checks.
+
+
+## H6 POST response follow-up
+
+This narrow H6 phase starts from H4 commit
+`82c8438ed046261c2e29bf3af01fe6f65fc89bb5`, keeping version `0.3a2.dev0`.
+Only the already received response text of `set_burn_level()`,
+`set_remote_refill_alarm()`, `set_night_lowering_hours()` and `set_time()` is
+interpreted by a shared private `_post_response_ok()` helper. A decoded JSON
+object still succeeds exactly when `response == "OK"`. Other or missing response
+values retain `False`; no case folding, value trimming or alternate success
+values are introduced. Additional object fields remain ignored.
+
+Malformed JSON and non-object JSON now return `False` instead of raising
+`JSONDecodeError` or a structure error. Only `JSONDecodeError` is caught, around
+`json.loads()` alone. Cancellation, memory errors and unexpected programming
+errors propagate. The existing `None` response handling remains unchanged.
+No new logging is added, and existing logging is untouched.
+
+**False means no valid success confirmation was received. It does not prove
+that the stove did not execute the command. No retry follows from this result.**
+
+The four setters' requests, preceding status reads, signatures and all other
+runtime code are unchanged. In particular, `_get()`, `_get_json()`, `_post()`,
+HTTP status handling, transport exceptions, timeouts, retry behavior, GET
+commands, H3 cleanup and H4 status processing retain their H4 bytes. Dependencies
+and `hwam_stove` are unchanged. This does not complete the whole H6 finding.
+
+Exactly two H6 xfail cases become regular regressions: malformed POST JSON and
+wrong POST response shape. The remaining nine xfails still characterize H6
+HTTP status errors (2), H6 response transport errors (3), M1 live data (3) and
+M2 self-test polling (1). They remain strict; XPASS is a verification failure.
+
+`test_post_response_validation.py` covers all four POST setters, exact success
+semantics, malformed/non-object replies, exception propagation and no added
+requests. Its SHA-256-pinned `h4_commands.json` fixture contains all six command
+methods copied from the exact H4 commit; direct comparisons preserve results,
+types and complete request sequences, including preliminary reads.
+
+Artifact validation retains the historical H3/H4 approvals. Removing only the
+new parser and restoring only four exact return expressions must reproduce the
+full H4 source hash. Setter request construction is outside this exception.
+The complete current source hash is checked separately. The H6 suite and its
+fixture are included in sdists and installed-wheel verification.
+
+Synthetic response tests need no hardware for this parsing-only scope. They do
+not establish real firmware HTTP status conventions or actual command execution
+after a lost response. H5 timeout tuning, H7 retry assessment, H9 file concurrency,
+L2 transport logging and the broader M1/M2 findings remain separate work.

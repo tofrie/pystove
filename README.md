@@ -6,7 +6,9 @@ The development version `0.3a2.dev0` preserves the published `0.3a1` successful 
 and HWAM request contract. Audit H3 now cleans up owned sessions and tasks after
 failed or cancelled initialization. H4 makes invalid or incomplete status data
 return `None`; successful data retains the exact baseline values and types.
-Other runtime defects remain unchanged. See the exact
+The narrow H6 follow-up returns `False` for malformed/non-object JSON in POST
+setter confirmations. This means success is unconfirmed, not that the command
+was not executed; no retry is added. Other runtime defects remain unchanged. See the exact
 [compatibility contract](docs/BASELINE.md) and [development checks](docs/DEVELOPMENT.md).
 
 ### Contents

@@ -180,6 +180,20 @@ STOVE_START_URL = "/start"
 UNKNOWN = "Unknown"
 
 
+def _post_response_ok(response_text):
+    """Return whether a received POST body confirms success, without retrying.
+
+    False means no valid confirmation, not that the command was not executed.
+    """
+    try:
+        response = json.loads(response_text)
+    except json.JSONDecodeError:
+        return False
+    if not isinstance(response, dict):
+        return False
+    return response.get(DATA_RESPONSE) == RESPONSE_OK
+
+
 async def _finish_initialization_cleanup(operation, message):
     """Finish owned cleanup without replacing the initialization exception."""
     try:
@@ -405,7 +419,7 @@ class Stove:
         if json_str is None:
             _LOGGER.error("Got empty or no response from stove.")
             return False
-        return json.loads(json_str).get(DATA_RESPONSE) == RESPONSE_OK
+        return _post_response_ok(json_str)
 
     async def set_night_lowering(self, state=None):
         """Switch/toggle night lowering (True=on, False=off, None=toggle)."""
@@ -440,7 +454,7 @@ class Stove:
         if json_str is None:
             _LOGGER.error("Got empty or no response from stove.")
             return False
-        return json.loads(json_str).get(DATA_RESPONSE) == RESPONSE_OK
+        return _post_response_ok(json_str)
 
     async def set_remote_refill_alarm(self, state=None):
         """Set or toggle remote_refill_alarm setting."""
@@ -456,7 +470,7 @@ class Stove:
         if json_str is None:
             _LOGGER.error("Got empty or no response from stove.")
             return False
-        return json.loads(json_str).get(DATA_RESPONSE) == RESPONSE_OK
+        return _post_response_ok(json_str)
 
     async def set_time(self, new_time=None):
         """Set the time and date of the stove."""
@@ -476,7 +490,7 @@ class Stove:
         if json_str is None:
             _LOGGER.error("Got empty or no response from stove.")
             return False
-        return json.loads(json_str).get(DATA_RESPONSE) == RESPONSE_OK
+        return _post_response_ok(json_str)
 
     async def start(self):
         """Start the ignition phase."""

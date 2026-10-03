@@ -7,7 +7,6 @@ test makes requests to a physical stove or opens a network connection.
 """
 
 import asyncio
-import json
 from types import SimpleNamespace
 
 import aiohttp
@@ -114,25 +113,17 @@ def test_get_data_rejects_non_object_json(stove, session):
 
 
 @pytest.mark.parametrize(
-    ("method", "arguments", "body", "legacy_error"),
+    ("method", "arguments", "body"),
     [
-        ("set_burn_level", (3,), '{"response":', json.JSONDecodeError),
-        ("set_remote_refill_alarm", (True,), "[]", AttributeError),
+        ("set_burn_level", (3,), '{"response":'),
+        ("set_remote_refill_alarm", (True,), "[]"),
     ],
     ids=["malformed-json", "wrong-response-shape"],
 )
-@pytest.mark.xfail(
-    strict=True,
-    raises=_KnownLegacyFailure,
-    reason=(
-        "Audit H6; baseline 0.3a1: setters do not safely reject invalid JSON responses"
-    ),
-)
-def test_command_rejects_invalid_response(
-    stove, session, method, arguments, body, legacy_error
-):
+def test_command_rejects_invalid_response(stove, session, method, arguments, body):
+    """Audit H6 regression: invalid POST confirmations return False."""
     session.queue_text(body, method="POST")
-    _expect_rejection(getattr(stove, method)(*arguments), legacy_error, result=False)
+    assert asyncio.run(getattr(stove, method)(*arguments)) is False
 
 
 @pytest.mark.parametrize(

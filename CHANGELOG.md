@@ -1,6 +1,12 @@
 # pystove Changelog
 
 ### 0.3a2.dev0 (unreleased)
+- H6 POST response follow-up: return `False` for malformed JSON or non-object
+  JSON confirmations in the four POST setters. Preserve successful commands,
+  transport behavior and all nine remaining expected failures. `False` means
+  unconfirmed success, not proof that a command was not executed; no retry is added.
+- Add POST response matrices and comparisons against the six exact H4 commands;
+  extend artifact scope checks while retaining historical H3/H4 approvals.
 - H4 follow-up: validate the 36 required status fields within `get_data()` and
   return `None` for absent, incomplete or unprocessable data. Preserve successful
   baseline conversions, values and types; leave transport and commands unchanged.

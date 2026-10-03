@@ -36,6 +36,19 @@
       ],
       "unchanged_source_sha256": "4174cf69733cf7b6cd474c9e009112568ed76ea718e8c9b2e56b42aacda4e02e",
       "source_sha256": "5c22524424f60d550b059dc52994640bcfb6941e6a0ad59bec99046408cd9569"
+    },
+    "H6": {
+      "h4_commit": "82c8438ed046261c2e29bf3af01fe6f65fc89bb5",
+      "path": "pystove/pystove.py",
+      "response_expressions": [
+        "Stove.set_burn_level",
+        "Stove.set_remote_refill_alarm",
+        "Stove.set_night_lowering_hours",
+        "Stove.set_time"
+      ],
+      "added_module_function": "_post_response_ok",
+      "unchanged_source_sha256": "5c22524424f60d550b059dc52994640bcfb6941e6a0ad59bec99046408cd9569",
+      "source_sha256": "0e01238ef052cdb501674f73e4bac79db22dd6d26c32cfa9f2e74747b435d782"
     }
   }
 }

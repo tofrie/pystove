@@ -1,11 +1,13 @@
-"""Validate artifacts against 0.3a1 and the separately reviewed H3/H4 fixes.
+"""Validate artifacts against 0.3a1 and the separately reviewed H3/H4/H6 fixes.
 
 This module deliberately uses only the standard library and never imports the
 package. The baseline hashes describe the published runtime, not freshly
 generated expectations from the code under test. The historical H3 approval is
 retained verbatim. The H4 scope hash freezes every byte of that revision outside
 the existing get_data body, including all lifecycle and transport code. Each
-approval also requires the exact separately reviewed full source hash.
+approval also requires the exact separately reviewed full source hash. H6 restores
+only four POST response expressions and removes its private parser to recover
+the complete, hash-pinned H4 source; all request construction stays frozen.
 """
 
 import argparse
@@ -85,8 +87,10 @@ def validate_runtime_source(name, data, baseline):
     expected = baseline["runtime_sha256"][name]
     reviewed = baseline.get("reviewed_runtime_changes", {})
     if reviewed:
-        if set(reviewed) not in ({"H3"}, {"H3", "H4"}):
-            raise ValidationError("Only the reviewed H3/H4 runtime changes are allowed")
+        if set(reviewed) not in ({"H3"}, {"H3", "H4"}, {"H3", "H4", "H6"}):
+            raise ValidationError(
+                "Only the reviewed H3/H4/H6 runtime changes are allowed"
+            )
         change = reviewed["H3"]
         if (
             change["path"] != "pystove/pystove.py"
@@ -115,7 +119,31 @@ def validate_runtime_source(name, data, baseline):
                 != "4174cf69733cf7b6cd474c9e009112568ed76ea718e8c9b2e56b42aacda4e02e"
             ):
                 raise ValidationError("Reviewed H4 runtime scope changed")
-            if name == status_change["path"]:
+            if "H6" in reviewed:
+                if status_change["source_sha256"] != (
+                    "5c22524424f60d550b059dc52994640bcfb6941e6a0ad59bec99046408cd9569"
+                ):
+                    raise ValidationError("Historical H4 approval changed")
+                post_change = reviewed["H6"]
+                if (
+                    post_change["path"] != "pystove/pystove.py"
+                    or post_change["h4_commit"]
+                    != "82c8438ed046261c2e29bf3af01fe6f65fc89bb5"
+                    or post_change["response_expressions"] != POST_RESPONSE_METHODS
+                    or post_change["added_module_function"] != "_post_response_ok"
+                    or post_change["unchanged_source_sha256"]
+                    != status_change["source_sha256"]
+                ):
+                    raise ValidationError("Reviewed H6 runtime scope changed")
+                if name == post_change["path"]:
+                    if post_response_scope_hash(data) != (
+                        post_change["unchanged_source_sha256"]
+                    ):
+                        raise ValidationError(
+                            "Runtime outside H6 POST response decoding changed"
+                        )
+                    expected = post_change["source_sha256"]
+            elif name == status_change["path"]:
                 if status_scope_hash(data) != status_change["unchanged_source_sha256"]:
                     raise ValidationError("Runtime outside H4 get_data body changed")
                 expected = status_change["source_sha256"]
@@ -204,6 +232,66 @@ def status_scope_hash(data):
     start = sum(map(len, lines[: first.lineno - 1])) + first.col_offset
     end = sum(map(len, lines[: last.end_lineno - 1])) + last.end_col_offset
     data = data[:start] + b"<reviewed H4 get_data body>" + data[end:]
+    return hashlib.sha256(data).hexdigest()
+
+
+POST_RESPONSE_METHODS = [
+    "Stove.set_burn_level",
+    "Stove.set_remote_refill_alarm",
+    "Stove.set_night_lowering_hours",
+    "Stove.set_time",
+]
+
+
+def post_response_scope_hash(data):
+    """Recover H4 bytes, allowing only a parser and four return expressions."""
+    tree = ast.parse(data.decode("utf-8"))
+    helpers = [
+        node for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "_post_response_ok"
+    ]
+    stoves = [
+        node for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "Stove"
+    ]
+    if len(helpers) != 1 or len(stoves) != 1:
+        raise ValidationError("H6 requires one private parser and one Stove class")
+    helper = helpers[0]
+    following = tree.body[tree.body.index(helper) + 1:]
+    if (
+        helper.decorator_list
+        or not following
+        or not isinstance(following[0], ast.AsyncFunctionDef)
+        or following[0].name != "_finish_initialization_cleanup"
+    ):
+        raise ValidationError("H6 parser must immediately precede H3 cleanup")
+    lines = data.splitlines(keepends=True)
+    start = sum(map(len, lines[:helper.lineno - 1]))
+    end = sum(map(len, lines[:following[0].lineno - 1]))
+    statement_end = (
+        sum(map(len, lines[:helper.end_lineno - 1])) + helper.end_col_offset
+    )
+    if data[statement_end:end].strip():
+        raise ValidationError("H6 parser must have only trailing whitespace")
+    ranges = [(start, end, b"")]
+    for qualified_name in POST_RESPONSE_METHODS:
+        method_name = qualified_name.split(".")[1]
+        methods = [
+            node for node in stoves[0].body
+            if isinstance(node, ast.AsyncFunctionDef) and node.name == method_name
+        ]
+        if len(methods) != 1:
+            raise ValidationError(f"H6 requires exactly one {qualified_name}")
+        last = methods[0].body[-1]
+        start = sum(map(len, lines[:last.lineno - 1])) + last.col_offset
+        end = sum(map(len, lines[:last.end_lineno - 1])) + last.end_col_offset
+        if data[start:end] != b"return _post_response_ok(json_str)":
+            raise ValidationError("H6 permits only the reviewed response expression")
+        ranges.append((
+            start, end, b"return json.loads(json_str).get(DATA_RESPONSE) == RESPONSE_OK"
+        ))
+    for start, end, replacement in sorted(ranges, reverse=True):
+        data = data[:start] + replacement + data[end:]
     return hashlib.sha256(data).hexdigest()
 
 
@@ -345,6 +433,8 @@ def required_sdist_sources(repo_root=ROOT):
         "tests/test_contract_commands.py",
         "tests/test_create_lifecycle.py",
         "tests/test_status_validation.py",
+        "tests/test_post_response_validation.py",
+        "tests/fixtures/h4_commands.json",
         "tests/test_known_failures.py",
         "tests/test_packaging.py",
         "tests/fixtures/hwam_contract.json",
