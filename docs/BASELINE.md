@@ -1,5 +1,8 @@
 # Compatibility baseline and first-phase boundaries
 
+The reference contract and first-phase boundaries below record Phase 1. The
+subsequent approved H3 correction is described in [H3 follow-up](#h3-follow-up).
+
 ## Reference artifacts
 
 The compatibility reference is the published `pystove==0.3a1` and its matching
@@ -382,3 +385,54 @@ and `ci/validate_package.py`.
 No hardware test is needed to validate this packaging/test-only scope.
 Hardware validation remains mandatory before later changes to communication,
 timing, parsing conventions or a real integration upgrade are released.
+
+## H3 follow-up
+
+The H3-only branch starts from Phase 1 commit
+`5876e2d7c381baf1dc72815a110bc2c0b2c2d8c4` and retains the unpublished development
+version `0.3a2.dev0`. H3 is now corrected; all other deferred defects remain.
+
+`Stove.create()` owns the session it constructs; there is no supplied-session
+API. On initialization failure or cancellation it closes that exact session,
+even if a subclass has replaced `self._session`. Successful initialization keeps
+the session open and `destroy()` retains its original behavior.
+
+Identification still schedules identity, SSID and version-file operations in
+their original order and uses the same request/parsing code. The three owned
+tasks and their original gather are retained. Failure or cancellation cancels
+unfinished owned tasks and awaits all of them before session cleanup. Unrelated
+tasks and sessions are untouched. An unscheduled coroutine is closed if task
+creation fails. Shielded cleanup waits through further caller cancellation and
+then re-raises the original initialization exception or `CancelledError`, including
+its message. No cleanup timeout or new retry policy is introduced.
+
+Cleanup logs use the existing `pystove.pystove` logger at ERROR with traceback:
+
+| Message | Logged cause |
+| --- | --- |
+| `Unable to close session after failed initialization.` | Exception from session cleanup, including cancellation originating in `close()` itself |
+| `Additional identify task failure during initialization cleanup.` | Additional child exception different from the original cause; normal child cancellation is excluded |
+| `Unable to finish identify task cleanup.` | Unexpected failure while scheduling or draining identify cleanup |
+
+The original initialization cause is propagated rather than replaced by these
+cleanup errors. Ordinary caller/child cancellation is not logged as a cleanup
+failure. Cleanup errors are retrieved so completed tasks/gathers do not emit
+unobserved-exception warnings.
+
+The original 0.3a1 hashes remain in `ci/compatibility_baseline.json`. A separate
+reviewed H3 hash permits exactly this runtime delta; a Phase 1 byte digest also
+protects all code outside `create()`, `_identify()` and the new private cleanup
+helper. The nested identify request/parsing functions were reviewed against
+Phase 1 and remain unchanged. Contract tests retain the successful request order,
+endpoints, methods, payloads, headers, data types and public API.
+
+The two former H3 xfails are ordinary regression tests; all 22 other xfails
+remain. Tests cover repeated failures, repeated cancellation during task/session
+cleanup, secondary cleanup errors, ownership and real aiohttp sessions/connectors
+without requests or sockets. H3 requires no hardware access.
+
+Cleanup assumes the running loop can schedule its work and finalizers eventually
+finish. A finalizer or `close()` that never returns delays error/cancellation
+propagation; adding a timeout is outside H3. If `close()` itself fails before
+closing its resource, successful closure cannot be guaranteed; its error is
+logged and the original initialization cause still propagates.

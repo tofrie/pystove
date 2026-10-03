@@ -14,5 +14,18 @@
     "pystove/pystove.py": "728568447d4442b2056f9cc80f12fe43e08f3d97c86160105218f02925ed7445",
     "pystove/version.py": "f9ed531d812e7ef01ee6a101b74698cc0705647d07a11aca41b748a578828914",
     "pystove_cli.py": "974234ea3eeb6f7e2a5a2110b4a79a6592df9efd34f6cc9f74dfdb3f52c4da0d"
+  },
+  "reviewed_runtime_changes": {
+    "H3": {
+      "phase1_commit": "5876e2d7c381baf1dc72815a110bc2c0b2c2d8c4",
+      "path": "pystove/pystove.py",
+      "method_bodies": [
+        "Stove.create",
+        "Stove._identify"
+      ],
+      "added_module_function": "_finish_initialization_cleanup",
+      "unchanged_source_sha256": "37ae04cf80918b39077325f0201a75474d571196f30700b1d44e99dfbd92fb3e",
+      "source_sha256": "92043ef713a67a6dc8fa6d4d3f9cea1f386f3f736f97584bb47f8257f35d66ac"
+    }
   }
 }

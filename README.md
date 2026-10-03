@@ -2,9 +2,9 @@
 
 An async python library with command line interface to interact with HWAM SmartControl wood burning stoves.
 
-The development version `0.3a2.dev0` preserves the published `0.3a1` compatibility
-baseline. Its runtime and HWAM requests are unchanged; only the version, packaging,
-tests, documentation and development checks are being prepared. See the exact
+The development version `0.3a2.dev0` preserves the published `0.3a1` successful API
+and HWAM request contract. Audit H3 now cleans up owned sessions and tasks after
+failed or cancelled initialization; other runtime defects remain unchanged. See the exact
 [compatibility contract](docs/BASELINE.md) and [development checks](docs/DEVELOPMENT.md).
 
 ### Contents

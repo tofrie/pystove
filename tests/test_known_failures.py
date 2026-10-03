@@ -39,12 +39,8 @@ def _expect_rejection(coroutine, legacy_error, *, result=None, error_args=None):
     assert actual is result
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=_KnownLegacyFailure,
-    reason="Audit H3; baseline 0.3a1: failed factory identification leaks its session",
-)
 def test_factory_closes_session_after_identification_failure(monkeypatch, session):
+    """Audit H3 regression: failed identification releases its owned session."""
     async def fail_identification(self):
         raise RuntimeError("scripted identification failure")
 
@@ -52,19 +48,12 @@ def test_factory_closes_session_after_identification_failure(monkeypatch, sessio
     monkeypatch.setattr(Stove, "_identify", fail_identification)
     with pytest.raises(RuntimeError, match="^scripted identification failure$"):
         asyncio.run(Stove.create("stove.test"))
-    _known_failure(session.close_calls == 1, "Factory left its session open")
+    assert session.close_calls == 1
     assert session.closed
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=_KnownLegacyFailure,
-    reason=(
-        "Audit H3; baseline 0.3a1: cancellation during factory identification "
-        "leaks session"
-    ),
-)
 def test_factory_closes_session_after_identification_cancellation(monkeypatch, session):
+    """Audit H3 regression: cancelled identification releases its session."""
     async def cancel_identification(self):
         raise asyncio.CancelledError
 
@@ -72,7 +61,7 @@ def test_factory_closes_session_after_identification_cancellation(monkeypatch, s
     monkeypatch.setattr(Stove, "_identify", cancel_identification)
     with pytest.raises(asyncio.CancelledError):
         asyncio.run(Stove.create("stove.test"))
-    _known_failure(session.close_calls == 1, "Cancelled factory left its session open")
+    assert session.close_calls == 1
     assert session.closed
 
 

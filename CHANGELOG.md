@@ -1,6 +1,11 @@
 # pystove Changelog
 
 ### 0.3a2.dev0 (unreleased)
+- H3 follow-up: close the factory-owned session after failed/cancelled initialization,
+  cancel and await owned identify tasks, and preserve the original cause even when
+  cleanup fails or the caller cancels again. Successful requests remain unchanged.
+- Convert only the two H3 expected failures into regression tests and add focused
+  lifecycle tests, including real sessions without network requests.
 - Establish published `0.3a1` / commit `6d2f7844d3fa49a339820c446aa47ba29e60e94a`
   as the compatibility reference for `hwam_stove` commit
   `2176600eece1c644f594a9608186bf395bb2488b`.

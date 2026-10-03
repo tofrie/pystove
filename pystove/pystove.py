@@ -180,6 +180,26 @@ STOVE_START_URL = "/start"
 UNKNOWN = "Unknown"
 
 
+async def _finish_initialization_cleanup(operation, message):
+    """Finish owned cleanup without replacing the initialization exception."""
+    try:
+        coroutine = operation()
+        try:
+            cleanup = asyncio.ensure_future(coroutine)
+        except BaseException:
+            coroutine.close()
+            raise
+        while not cleanup.done():
+            try:
+                await asyncio.shield(cleanup)
+            except asyncio.CancelledError:
+                # Further caller cancellation must not interrupt owned cleanup.
+                continue
+        cleanup.result()
+    except BaseException:
+        _LOGGER.error(message, exc_info=True)
+
+
 class Stove:
     """Abstraction of a Stove object."""
 
@@ -195,9 +215,19 @@ class Stove:
         self.stove_ip = UNKNOWN
         self.stove_mdns = UNKNOWN
         self.stove_ssid = UNKNOWN
-        self._session = aiohttp.ClientSession(headers=HTTP_HEADERS)
-        if not skip_ident:
-            await self._identify()
+        session = aiohttp.ClientSession(headers=HTTP_HEADERS)
+        try:
+            self._session = session
+            if not skip_ident:
+                await self._identify()
+        except BaseException:
+            async def close_session():
+                await session.close()
+
+            await _finish_initialization_cleanup(
+                close_session, "Unable to close session after failed initialization."
+            )
+            raise
         return self
 
     async def destroy(self):
@@ -463,13 +493,44 @@ class Stove:
             else:
                 _LOGGER.warning("Unable to open stove version info file.")
 
-        await asyncio.gather(
-            *[
-                get_identification(),
-                get_ssid(),
-                get_version_info(),
-            ]
-        )
+        tasks = []
+        group = None
+        try:
+            for identify in (get_identification, get_ssid, get_version_info):
+                coroutine = identify()
+                try:
+                    task = asyncio.ensure_future(coroutine)
+                except BaseException:
+                    coroutine.close()
+                    raise
+                tasks.append(task)
+            group = asyncio.gather(*tasks)
+            await asyncio.shield(group)
+        except BaseException as cause:
+            async def cleanup_tasks(initial_error=cause):
+                for task in tasks:
+                    if not task.done():
+                        task.cancel()
+                pending = [*tasks]
+                if group is not None:
+                    pending.append(group)
+                results = await asyncio.gather(*pending, return_exceptions=True)
+                for result in results[:len(tasks)]:
+                    if (
+                        isinstance(result, BaseException)
+                        and not isinstance(result, asyncio.CancelledError)
+                        and result is not initial_error
+                    ):
+                        _LOGGER.error(
+                            "Additional identify task failure during "
+                            "initialization cleanup.",
+                            exc_info=(type(result), result, result.__traceback__),
+                        )
+
+            await _finish_initialization_cleanup(
+                cleanup_tasks, "Unable to finish identify task cleanup."
+            )
+            raise
 
     async def _self_test_result(self):
         """Get self test result."""

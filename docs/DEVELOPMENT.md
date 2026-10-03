@@ -45,7 +45,7 @@ python ci/test_wheel.py --dist-dir dist
 
 The ordinary build creates an sdist and then builds the wheel from that sdist,
 using an isolated backend. Archive validation checks package metadata, the
-unmodified runtime sources, wheel RECORD hashes and the sdist's required files.
+reviewed runtime sources, wheel RECORD hashes and the sdist's required files.
 The separate isolated check prepares metadata and builds artifacts while proving
 that aiohttp is absent from the build environment. It does not install the
 package's runtime requirements there.
@@ -76,9 +76,14 @@ failures, each linked to its audit finding. An unexpected pass fails the suite;
 it must not silently convert a defect into part of the required compatibility
 contract. The tests use synthetic responses, not captured hardware fixtures.
 
-`ci/compatibility_baseline.json` records the baseline commit, original distribution
-hashes and runtime file hashes. Validation preserves `pystove.py`, `__init__.py`
-and the CLI byte for byte. For `version.py`, only the version literal may differ.
+`ci/compatibility_baseline.json` retains the baseline commit, original distribution
+hashes and all original runtime hashes. Its separate H3 approval pins the reviewed
+`pystove.py` hash and an independent Phase 1 byte hash outside the two lifecycle
+method bodies and their new private cleanup helper. Signatures, constants, imports
+and every other method remain frozen. `__init__.py` and the CLI remain byte for
+byte unchanged; for `version.py`, only the development version literal may differ.
+The 27 new lifecycle cases and the two former H3 expected failures are ordinary
+regression tests. The other 22 strict expected failures remain unchanged.
 
 Ruff only checks files. The narrow CLI suppressions preserve existing import and
 string-formatting style without excluding the CLI from other lint rules. The
@@ -87,8 +92,11 @@ pyupgrade hooks are not installed. New test/build files receive the normal rules
 
 ## Phase boundary
 
-No network, timeout, retry, parsing, protocol, HTTP, command, live-data, self-test
-or file-operation defects are fixed here. Runtime dependencies and the HA
-integration are unchanged. The workflow contains no publishing, deployment or
-secret-dependent steps. These offline checks need no hardware test; later
-communication or runtime changes still need the hardware gates from the audit.
+The only runtime fix after Phase 1 is H3: cleanup of initialization-owned sessions
+and tasks after an error or cancellation, including repeated cancellation during
+cleanup. No network, timeout, retry, parsing, protocol, HTTP, command, live-data,
+self-test or file-operation defects are fixed. Runtime dependencies and the HA
+integration remain unchanged. Exact cleanup logging and limitations are recorded
+in [BASELINE.md](BASELINE.md#h3-follow-up). The workflow contains no publishing,
+deployment or secret-dependent steps. H3 is checked without network or hardware;
+later communication changes still need the hardware gates from the audit.

@@ -148,10 +148,88 @@ def write_sdist(path, *, omit=None, mutate=None, special=None):
             archive.addfile(special)
 
 
-def test_runtime_and_cli_are_frozen_to_published_baseline():
+def test_runtime_and_cli_match_baseline_plus_reviewed_h3_fix():
     baseline, version = validator.validate_sources(ROOT)
     assert version != baseline["version"]
     assert ".dev" in version
+
+
+def test_published_baseline_hashes_are_not_replaced_by_h3():
+    baseline = validator.load_baseline(ROOT)
+    assert baseline["commit"] == "6d2f7844d3fa49a339820c446aa47ba29e60e94a"
+    assert baseline["version"] == "0.3a1"
+    assert baseline["runtime_sha256"] == {
+        "pystove/__init__.py": (
+            "d72dcfa678bc6194a5f3aedb7379d2beb3a1392f9696d22cbca16bb1d5358bdf"
+        ),
+        "pystove/pystove.py": (
+            "728568447d4442b2056f9cc80f12fe43e08f3d97c86160105218f02925ed7445"
+        ),
+        "pystove/version.py": (
+            "f9ed531d812e7ef01ee6a101b74698cc0705647d07a11aca41b748a578828914"
+        ),
+        "pystove_cli.py": (
+            "974234ea3eeb6f7e2a5a2110b4a79a6592df9efd34f6cc9f74dfdb3f52c4da0d"
+        ),
+    }
+    assert baseline["reviewed_runtime_changes"]["H3"]["unchanged_source_sha256"] == (
+        "37ae04cf80918b39077325f0201a75474d571196f30700b1d44e99dfbd92fb3e"
+    )
+
+
+def test_h3_body_mutation_requires_new_explicit_reviewed_source_hash():
+    baseline = validator.load_baseline(ROOT)
+    source = (ROOT / "pystove/pystove.py").read_bytes()
+    changed = source.replace(
+        b'"""Async create the Stove object."""',
+        b'"""Unreviewed lifecycle edit."""',
+        1,
+    )
+    assert changed != source
+    assert validator.lifecycle_scope_hash(changed) == validator.lifecycle_scope_hash(
+        source
+    )
+    with pytest.raises(validator.ValidationError, match="Frozen runtime changed"):
+        validator.validate_runtime_source("pystove/pystove.py", changed, baseline)
+
+
+def test_new_h3_hash_cannot_allow_changes_outside_lifecycle_bodies():
+    baseline = validator.load_baseline(ROOT)
+    source = (ROOT / "pystove/pystove.py").read_bytes()
+    changed = source.replace(b'DATA_LEVEL = "level"', b'DATA_LEVEL = "changed"', 1)
+    assert changed != source
+    baseline["reviewed_runtime_changes"]["H3"]["source_sha256"] = hashlib.sha256(
+        changed
+    ).hexdigest()
+    with pytest.raises(validator.ValidationError, match="outside H3 lifecycle"):
+        validator.validate_runtime_source("pystove/pystove.py", changed, baseline)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("path", "pystove/__init__.py"),
+        ("method_bodies", ["Stove.create", "Stove.get_data"]),
+        ("added_module_function", "another_helper"),
+        ("phase1_commit", "unreviewed"),
+    ],
+)
+def test_h3_review_cannot_be_expanded_to_another_scope(field, value):
+    baseline = validator.load_baseline(ROOT)
+    baseline["reviewed_runtime_changes"]["H3"][field] = value
+    with pytest.raises(validator.ValidationError, match="H3 runtime scope changed"):
+        validator.validate_runtime_source(
+            "pystove/pystove.py", (ROOT / "pystove/pystove.py").read_bytes(), baseline
+        )
+
+
+def test_artifact_validation_does_not_allow_another_audit_fix():
+    baseline = validator.load_baseline(ROOT)
+    baseline["reviewed_runtime_changes"]["H4"] = {}
+    with pytest.raises(validator.ValidationError, match="Only the reviewed H3"):
+        validator.validate_runtime_source(
+            "pystove/pystove.py", (ROOT / "pystove/pystove.py").read_bytes(), baseline
+        )
 
 
 def test_setup_metadata_does_not_import_runtime_dependencies(tmp_path):
@@ -248,7 +326,7 @@ def test_wheel_rejects_runtime_changes_even_with_valid_record(tmp_path):
         files["pystove/pystove.py"] += b"\n# accidental runtime edit\n"
 
     write_wheel(wheel, mutate=mutate)
-    with pytest.raises(validator.ValidationError, match="Frozen runtime changed"):
+    with pytest.raises(validator.ValidationError, match="outside H3 lifecycle bodies"):
         validator.validate_wheel(wheel, ROOT)
 
 
@@ -291,6 +369,7 @@ def test_wheel_rejects_broken_record(tmp_path, change):
         "requirements-dev.txt",
         "pystove_cli.py",
         "tests/test_known_failures.py",
+        "tests/test_create_lifecycle.py",
         "tests/fixtures/hwam_contract.json",
         "ci/compatibility_baseline.json",
         "docs/BASELINE.md",

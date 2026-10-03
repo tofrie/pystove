@@ -1,8 +1,11 @@
-"""Validate release artifacts against the frozen, working 0.3a1 contract.
+"""Validate release artifacts against the working 0.3a1 contract and H3 fix.
 
 This module deliberately uses only the standard library and never imports the
 package. The baseline hashes describe the published runtime, not freshly
-generated expectations from the code under test.
+generated expectations from the code under test. The separately reviewed H3
+source hash permits only that exact revision; its scope hash additionally freezes
+all bytes outside the two existing lifecycle method bodies and their new private
+cleanup helper.
 """
 
 import argparse
@@ -80,8 +83,80 @@ def baseline_source_hash(name, data, baseline):
 
 def validate_runtime_source(name, data, baseline):
     expected = baseline["runtime_sha256"][name]
+    reviewed = baseline.get("reviewed_runtime_changes", {})
+    if reviewed:
+        if set(reviewed) != {"H3"}:
+            raise ValidationError("Only the reviewed H3 runtime change is allowed")
+        change = reviewed["H3"]
+        if (
+            change["path"] != "pystove/pystove.py"
+            or change["method_bodies"] != ["Stove.create", "Stove._identify"]
+            or change["added_module_function"] != "_finish_initialization_cleanup"
+            or change["phase1_commit"]
+            != "5876e2d7c381baf1dc72815a110bc2c0b2c2d8c4"
+        ):
+            raise ValidationError("Reviewed H3 runtime scope changed")
+        if name == change["path"]:
+            if lifecycle_scope_hash(data) != change["unchanged_source_sha256"]:
+                raise ValidationError("Runtime outside H3 lifecycle bodies changed")
+            expected = change["source_sha256"]
     if baseline_source_hash(name, data, baseline) != expected:
         raise ValidationError(f"Frozen runtime changed: {name}")
+
+
+def lifecycle_scope_hash(data):
+    """Freeze surrounding bytes; exclude only two H3 bodies and their helper."""
+    tree = ast.parse(data.decode("utf-8"))
+    stoves = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "Stove"
+    ]
+    if len(stoves) != 1:
+        raise ValidationError("H3 scope requires exactly one Stove class")
+    ranges = []
+    lines = data.splitlines(keepends=True)
+    helpers = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.AsyncFunctionDef)
+        and node.name == "_finish_initialization_cleanup"
+    ]
+    if helpers:
+        if len(helpers) != 1:
+            raise ValidationError("H3 scope permits only one private cleanup helper")
+        helper = helpers[0]
+        if helper.decorator_list or tree.body.index(helper) + 1 != tree.body.index(
+            stoves[0]
+        ):
+            raise ValidationError("H3 cleanup helper must immediately precede Stove")
+        start = sum(map(len, lines[: helper.lineno - 1]))
+        end = sum(map(len, lines[: stoves[0].lineno - 1]))
+        statement_end = (
+            sum(map(len, lines[: helper.end_lineno - 1])) + helper.end_col_offset
+        )
+        if data[statement_end:end].strip():
+            raise ValidationError(
+                "H3 cleanup helper must have only trailing whitespace"
+            )
+        # Removing the newly added function, including its trailing blank lines,
+        # leaves exactly the original spacing before the existing Stove class.
+        ranges.append((start, end, b""))
+    for method_name in ("create", "_identify"):
+        methods = [
+            node
+            for node in stoves[0].body
+            if isinstance(node, ast.AsyncFunctionDef) and node.name == method_name
+        ]
+        if len(methods) != 1:
+            raise ValidationError(f"H3 scope requires one Stove.{method_name}")
+        first, last = methods[0].body[0], methods[0].body[-1]
+        start = sum(map(len, lines[: first.lineno - 1])) + first.col_offset
+        end = sum(map(len, lines[: last.end_lineno - 1])) + last.end_col_offset
+        ranges.append((start, end, b"<reviewed H3 lifecycle body>"))
+    for start, end, replacement in sorted(ranges, reverse=True):
+        data = data[:start] + replacement + data[end:]
+    return hashlib.sha256(data).hexdigest()
 
 
 def validate_sources(repo_root=ROOT):
@@ -220,6 +295,7 @@ def required_sdist_sources(repo_root=ROOT):
         "tests/conftest.py",
         "tests/test_contract_api.py",
         "tests/test_contract_commands.py",
+        "tests/test_create_lifecycle.py",
         "tests/test_known_failures.py",
         "tests/test_packaging.py",
         "tests/fixtures/hwam_contract.json",
