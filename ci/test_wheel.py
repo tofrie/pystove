@@ -19,6 +19,7 @@ CONTRACT_TESTS = (
     "test_contract_api.py",
     "test_contract_commands.py",
     "test_create_lifecycle.py",
+    "test_status_validation.py",
     "test_known_failures.py",
 )
 

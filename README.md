@@ -4,7 +4,9 @@ An async python library with command line interface to interact with HWAM SmartC
 
 The development version `0.3a2.dev0` preserves the published `0.3a1` successful API
 and HWAM request contract. Audit H3 now cleans up owned sessions and tasks after
-failed or cancelled initialization; other runtime defects remain unchanged. See the exact
+failed or cancelled initialization. H4 makes invalid or incomplete status data
+return `None`; successful data retains the exact baseline values and types.
+Other runtime defects remain unchanged. See the exact
 [compatibility contract](docs/BASELINE.md) and [development checks](docs/DEVELOPMENT.md).
 
 ### Contents

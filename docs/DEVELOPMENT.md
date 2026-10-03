@@ -77,13 +77,17 @@ it must not silently convert a defect into part of the required compatibility
 contract. The tests use synthetic responses, not captured hardware fixtures.
 
 `ci/compatibility_baseline.json` retains the baseline commit, original distribution
-hashes and all original runtime hashes. Its separate H3 approval pins the reviewed
-`pystove.py` hash and an independent Phase 1 byte hash outside the two lifecycle
-method bodies and their new private cleanup helper. Signatures, constants, imports
-and every other method remain frozen. `__init__.py` and the CLI remain byte for
-byte unchanged; for `version.py`, only the development version literal may differ.
-The 27 new lifecycle cases and the two former H3 expected failures are ordinary
-regression tests. The other 22 strict expected failures remain unchanged.
+hashes, all original runtime hashes and the historical H3 approval. The separate
+H4 approval pins the reviewed `pystove.py` hash and an independent H3-base byte
+hash outside `get_data()`'s body. H3 cleanup, module imports, signatures, constants,
+transport and every other method remain frozen. `__init__.py` and the CLI remain
+byte for byte unchanged; the development version remains `0.3a2.dev0`.
+
+`test_status_validation.py` includes the original 0.3a1 `get_data()` source as a
+SHA-256-checked literal. Its valid-fixture comparisons check each of the 25 keys,
+values and exact types, including successful legacy edge cases. All 29 H3
+regressions remain; the eleven former H4 expected failures now assert `None`.
+The other eleven strict expected failures are unchanged.
 
 Ruff only checks files. The narrow CLI suppressions preserve existing import and
 string-formatting style without excluding the CLI from other lint rules. The
@@ -92,11 +96,11 @@ pyupgrade hooks are not installed. New test/build files receive the normal rules
 
 ## Phase boundary
 
-The only runtime fix after Phase 1 is H3: cleanup of initialization-owned sessions
-and tasks after an error or cancellation, including repeated cancellation during
-cleanup. No network, timeout, retry, parsing, protocol, HTTP, command, live-data,
-self-test or file-operation defects are fixed. Runtime dependencies and the HA
-integration remain unchanged. Exact cleanup logging and limitations are recorded
-in [BASELINE.md](BASELINE.md#h3-follow-up). The workflow contains no publishing,
-deployment or secret-dependent steps. H3 is checked without network or hardware;
-later communication changes still need the hardware gates from the audit.
+The runtime fixes after Phase 1 are H3 initialization cleanup and H4 status input
+validation. H4 changes only `get_data()` failure handling; its successful
+conversions remain compatible. No network, timeout, retry, protocol, HTTP, command,
+live-data, self-test or file-operation defects are fixed. Runtime dependencies and
+the HA integration remain unchanged. Exact validation, logging and limitations
+are recorded in [BASELINE.md](BASELINE.md#h4-follow-up). The workflow contains no
+publishing, deployment or secret-dependent steps. H3/H4 are checked without
+hardware; later communication changes still need the hardware gates from the audit.

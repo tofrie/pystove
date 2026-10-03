@@ -1,6 +1,11 @@
 # pystove Changelog
 
 ### 0.3a2.dev0 (unreleased)
+- H4 follow-up: validate the 36 required status fields within `get_data()` and
+  return `None` for absent, incomplete or unprocessable data. Preserve successful
+  baseline conversions, values and types; leave transport and commands unchanged.
+- Convert only the eleven H4 expected failures into regular regressions and add
+  literal 0.3a1 comparisons for valid status variants and bounded status diagnostics.
 - H3 follow-up: close the factory-owned session after failed/cancelled initialization,
   cancel and await owned identify tasks, and preserve the original cause even when
   cleanup fails or the caller cancels again. Successful requests remain unchanged.

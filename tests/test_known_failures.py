@@ -65,76 +65,52 @@ def test_factory_closes_session_after_identification_cancellation(monkeypatch, s
     assert session.closed
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=_KnownLegacyFailure,
-    reason="Audit H4; baseline 0.3a1: offline status becomes {} then KeyError('phase')",
-)
 def test_get_data_rejects_unreachable_controller(stove, session):
+    """Audit H4 regression: absent status does not enter the status parser."""
     connection_key = SimpleNamespace(host="stove.test", port=80, ssl=False)
     error = aiohttp.ClientConnectorError(
         connection_key, ConnectionRefusedError(111, "scripted connection refusal")
     )
     session.queue_text("", method="GET", enter_error=error)
-    _expect_rejection(stove.get_data(), KeyError, error_args=("phase",))
+    assert asyncio.run(stove.get_data()) is None
 
 
 @pytest.mark.parametrize(
     "body", ["not JSON", '{"phase":'], ids=["invalid", "truncated"]
 )
-@pytest.mark.xfail(
-    strict=True,
-    raises=_KnownLegacyFailure,
-    reason="Audit H4; baseline 0.3a1: malformed JSON becomes {} then KeyError('phase')",
-)
 def test_get_data_rejects_malformed_json(stove, session, body):
+    """Audit H4 regression: malformed status JSON produces a failed fetch."""
     session.queue_text(body, method="GET")
-    _expect_rejection(stove.get_data(), KeyError, error_args=("phase",))
+    assert asyncio.run(stove.get_data()) is None
 
 
 @pytest.mark.parametrize("missing", ["phase", "year", "stove_temperature"])
-@pytest.mark.xfail(
-    strict=True,
-    raises=_KnownLegacyFailure,
-    reason="Audit H4; baseline 0.3a1: missing status field escapes as KeyError",
-)
 def test_get_data_rejects_missing_required_field(stove, session, raw_data, missing):
+    """Audit H4 regression: partial status produces a failed fetch."""
     del raw_data[missing]
     session.queue_json(raw_data, method="GET")
-    _expect_rejection(stove.get_data(), KeyError, error_args=(missing,))
+    assert asyncio.run(stove.get_data()) is None
 
 
 @pytest.mark.parametrize("field", ["phase", "operation_mode", "night_lowering"])
-@pytest.mark.xfail(
-    strict=True,
-    raises=_KnownLegacyFailure,
-    reason="Audit H4; baseline 0.3a1: unknown status index escapes as IndexError",
-)
 def test_get_data_rejects_unknown_state(stove, session, raw_data, field):
+    """Audit H4 regression: unrecognized status index fails the entire fetch."""
     raw_data[field] = 99
     session.queue_json(raw_data, method="GET")
-    _expect_rejection(stove.get_data(), IndexError)
+    assert asyncio.run(stove.get_data()) is None
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=_KnownLegacyFailure,
-    reason="Audit H4; baseline 0.3a1: invalid calendar date escapes as ValueError",
-)
 def test_get_data_rejects_invalid_calendar_date(stove, session, raw_data):
+    """Audit H4 regression: impossible calendar values fail the fetch."""
     raw_data["day"] = 30  # February 2024 has only 29 days.
     session.queue_json(raw_data, method="GET")
-    _expect_rejection(stove.get_data(), ValueError)
+    assert asyncio.run(stove.get_data()) is None
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=_KnownLegacyFailure,
-    reason="Audit H4; baseline 0.3a1: non-object JSON escapes as TypeError",
-)
 def test_get_data_rejects_non_object_json(stove, session):
+    """Audit H4 regression: a status JSON array is not a status mapping."""
     session.queue_json([], method="GET")
-    _expect_rejection(stove.get_data(), TypeError)
+    assert asyncio.run(stove.get_data()) is None
 
 
 @pytest.mark.parametrize(

@@ -1,11 +1,11 @@
-"""Validate release artifacts against the working 0.3a1 contract and H3 fix.
+"""Validate artifacts against 0.3a1 and the separately reviewed H3/H4 fixes.
 
 This module deliberately uses only the standard library and never imports the
 package. The baseline hashes describe the published runtime, not freshly
-generated expectations from the code under test. The separately reviewed H3
-source hash permits only that exact revision; its scope hash additionally freezes
-all bytes outside the two existing lifecycle method bodies and their new private
-cleanup helper.
+generated expectations from the code under test. The historical H3 approval is
+retained verbatim. The H4 scope hash freezes every byte of that revision outside
+the existing get_data body, including all lifecycle and transport code. Each
+approval also requires the exact separately reviewed full source hash.
 """
 
 import argparse
@@ -85,8 +85,8 @@ def validate_runtime_source(name, data, baseline):
     expected = baseline["runtime_sha256"][name]
     reviewed = baseline.get("reviewed_runtime_changes", {})
     if reviewed:
-        if set(reviewed) != {"H3"}:
-            raise ValidationError("Only the reviewed H3 runtime change is allowed")
+        if set(reviewed) not in ({"H3"}, {"H3", "H4"}):
+            raise ValidationError("Only the reviewed H3/H4 runtime changes are allowed")
         change = reviewed["H3"]
         if (
             change["path"] != "pystove/pystove.py"
@@ -96,7 +96,30 @@ def validate_runtime_source(name, data, baseline):
             != "5876e2d7c381baf1dc72815a110bc2c0b2c2d8c4"
         ):
             raise ValidationError("Reviewed H3 runtime scope changed")
-        if name == change["path"]:
+        if "H4" in reviewed:
+            if (
+                change["source_sha256"]
+                != "92043ef713a67a6dc8fa6d4d3f9cea1f386f3f736f97584bb47f8257f35d66ac"
+                or change["unchanged_source_sha256"]
+                != "37ae04cf80918b39077325f0201a75474d571196f30700b1d44e99dfbd92fb3e"
+            ):
+                raise ValidationError("Historical H3 approval changed")
+            status_change = reviewed["H4"]
+            if (
+                status_change["path"] != "pystove/pystove.py"
+                or status_change["method_bodies"] != ["Stove.get_data"]
+                or status_change["h3_commit"]
+                != "35cc6bda8c014ca545f90f5b145b716bbcf68593"
+                or status_change["h3_source_sha256"] != change["source_sha256"]
+                or status_change["unchanged_source_sha256"]
+                != "4174cf69733cf7b6cd474c9e009112568ed76ea718e8c9b2e56b42aacda4e02e"
+            ):
+                raise ValidationError("Reviewed H4 runtime scope changed")
+            if name == status_change["path"]:
+                if status_scope_hash(data) != status_change["unchanged_source_sha256"]:
+                    raise ValidationError("Runtime outside H4 get_data body changed")
+                expected = status_change["source_sha256"]
+        elif name == change["path"]:
             if lifecycle_scope_hash(data) != change["unchanged_source_sha256"]:
                 raise ValidationError("Runtime outside H3 lifecycle bodies changed")
             expected = change["source_sha256"]
@@ -156,6 +179,31 @@ def lifecycle_scope_hash(data):
         ranges.append((start, end, b"<reviewed H3 lifecycle body>"))
     for start, end, replacement in sorted(ranges, reverse=True):
         data = data[:start] + replacement + data[end:]
+    return hashlib.sha256(data).hexdigest()
+
+
+def status_scope_hash(data):
+    """Freeze H3 and all surrounding bytes; exclude only the get_data body."""
+    tree = ast.parse(data.decode("utf-8"))
+    stoves = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "Stove"
+    ]
+    if len(stoves) != 1:
+        raise ValidationError("H4 scope requires exactly one Stove class")
+    methods = [
+        node
+        for node in stoves[0].body
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "get_data"
+    ]
+    if len(methods) != 1:
+        raise ValidationError("H4 scope requires one Stove.get_data")
+    first, last = methods[0].body[0], methods[0].body[-1]
+    lines = data.splitlines(keepends=True)
+    start = sum(map(len, lines[: first.lineno - 1])) + first.col_offset
+    end = sum(map(len, lines[: last.end_lineno - 1])) + last.end_col_offset
+    data = data[:start] + b"<reviewed H4 get_data body>" + data[end:]
     return hashlib.sha256(data).hexdigest()
 
 
@@ -296,6 +344,7 @@ def required_sdist_sources(repo_root=ROOT):
         "tests/test_contract_api.py",
         "tests/test_contract_commands.py",
         "tests/test_create_lifecycle.py",
+        "tests/test_status_validation.py",
         "tests/test_known_failures.py",
         "tests/test_packaging.py",
         "tests/fixtures/hwam_contract.json",

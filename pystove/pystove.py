@@ -235,34 +235,85 @@ class Stove:
 
     async def get_data(self):
         """Call get_raw_data, process result before returning."""
+        from collections.abc import MutableMapping
+
         data = await self.get_raw_data()
-        if data is None:
+        if not isinstance(data, MutableMapping):
+            _LOGGER.warning("Invalid stove status: expected a mutable mapping.")
             return
-        phase = PHASE[data[DATA_PHASE]]
-        stove_datetime = datetime(
-            data[DATA_YEAR],
-            data[DATA_MONTH],
-            data[DATA_DAY],
-            data[DATA_HOURS],
-            data[DATA_MINUTES],
-            data[DATA_SECONDS],
+        required = (
+            DATA_PHASE,
+            DATA_YEAR, DATA_MONTH, DATA_DAY, DATA_HOURS, DATA_MINUTES, DATA_SECONDS,
+            DATA_NEW_FIREWOOD_HOURS, DATA_NEW_FIREWOOD_MINUTES,
+            DATA_MAINTENANCE_ALARMS, DATA_SAFETY_ALARMS,
+            DATA_OPERATION_MODE, DATA_NIGHT_LOWERING,
+            DATA_NIGHT_BEGIN_HOUR, DATA_NIGHT_BEGIN_MINUTE,
+            DATA_NIGHT_END_HOUR, DATA_NIGHT_END_MINUTE,
+            DATA_FIRMWARE_VERSION_MAJOR, DATA_FIRMWARE_VERSION_MINOR,
+            DATA_FIRMWARE_VERSION_BUILD,
+            DATA_REMOTE_VERSION_MAJOR, DATA_REMOTE_VERSION_MINOR,
+            DATA_REMOTE_VERSION_BUILD,
+            DATA_STOVE_TEMPERATURE, DATA_ROOM_TEMPERATURE, DATA_OXYGEN_LEVEL,
+            DATA_ALGORITHM, DATA_BURN_LEVEL, DATA_MESSAGE_ID,
+            DATA_REFILL_ALARM, DATA_REMOTE_REFILL_ALARM,
+            DATA_TIME_SINCE_REMOTE_MSG, DATA_UPDATING,
+            DATA_VALVE1_POSITION, DATA_VALVE2_POSITION, DATA_VALVE3_POSITION,
         )
-        time_to_refuel = timedelta(
-            hours=data[DATA_NEW_FIREWOOD_HOURS], minutes=data[DATA_NEW_FIREWOOD_MINUTES]
-        )
-        refuel_estimate = stove_datetime + time_to_refuel
+        for field in required:
+            if field not in data:
+                _LOGGER.warning(
+                    "Invalid stove status: missing required field %s.", field
+                )
+                return
+        try:
+            field = DATA_PHASE
+            phase = PHASE[data[DATA_PHASE]]
+            field = DATA_DATE_TIME
+            stove_datetime = datetime(
+                data[DATA_YEAR],
+                data[DATA_MONTH],
+                data[DATA_DAY],
+                data[DATA_HOURS],
+                data[DATA_MINUTES],
+                data[DATA_SECONDS],
+            )
+            field = DATA_TIME_TO_NEW_FIREWOOD
+            time_to_refuel = timedelta(
+                hours=data[DATA_NEW_FIREWOOD_HOURS],
+                minutes=data[DATA_NEW_FIREWOOD_MINUTES],
+            )
+            field = DATA_NEW_FIREWOOD_ESTIMATE
+            refuel_estimate = stove_datetime + time_to_refuel
+            field = DATA_OPERATION_MODE
+            operation_mode = OPERATION_MODES[data[DATA_OPERATION_MODE]]
+            field = DATA_NIGHT_LOWERING
+            night_lowering = NIGHT_LOWERING_STATES[data[DATA_NIGHT_LOWERING]]
+            field = DATA_NIGHT_BEGIN_TIME
+            nighttime_start = time(
+                hour=data[DATA_NIGHT_BEGIN_HOUR], minute=data[DATA_NIGHT_BEGIN_MINUTE]
+            )
+            field = DATA_NIGHT_END_TIME
+            nighttime_end = time(
+                hour=data[DATA_NIGHT_END_HOUR], minute=data[DATA_NIGHT_END_MINUTE]
+            )
+            for field in (DATA_MAINTENANCE_ALARMS, DATA_SAFETY_ALARMS):
+                # Preserve the existing integer bitmask operation, including bools
+                # and negative/high masks, without catching errors from helpers.
+                1 & data[field]
+            scaled = {}
+            for field in (
+                DATA_STOVE_TEMPERATURE, DATA_ROOM_TEMPERATURE, DATA_OXYGEN_LEVEL
+            ):
+                scaled[field] = int(data[field] / 100)
+        except (TypeError, ValueError, IndexError, OverflowError) as exc:
+            _LOGGER.warning(
+                "Invalid stove status field %s (%s).", field, type(exc).__name__
+            )
+            return
         maintenance_alarms = self._get_maintenance_alarms_text(
             data[DATA_MAINTENANCE_ALARMS]
         )
         safety_alarms = self._get_safety_alarms_text(data[DATA_SAFETY_ALARMS])
-        operation_mode = OPERATION_MODES[data[DATA_OPERATION_MODE]]
-        night_lowering = NIGHT_LOWERING_STATES[data[DATA_NIGHT_LOWERING]]
-        nighttime_start = time(
-            hour=data[DATA_NIGHT_BEGIN_HOUR], minute=data[DATA_NIGHT_BEGIN_MINUTE]
-        )
-        nighttime_end = time(
-            hour=data[DATA_NIGHT_END_HOUR], minute=data[DATA_NIGHT_END_MINUTE]
-        )
         stove_version = (
             f"{data[DATA_FIRMWARE_VERSION_MAJOR]}"
             f".{data[DATA_FIRMWARE_VERSION_MINOR]}"
@@ -273,8 +324,8 @@ class Stove:
             f".{data[DATA_REMOTE_VERSION_MINOR]}"
             f".{data[DATA_REMOTE_VERSION_BUILD]}"
         )
-        for item in (DATA_STOVE_TEMPERATURE, DATA_ROOM_TEMPERATURE, DATA_OXYGEN_LEVEL):
-            data[item] = int(data[item] / 100)
+        for item, value in scaled.items():
+            data[item] = value
         processed_data = {
             DATA_ALGORITHM: data[DATA_ALGORITHM],
             DATA_BURN_LEVEL: data[DATA_BURN_LEVEL],

@@ -26,6 +26,16 @@
       "added_module_function": "_finish_initialization_cleanup",
       "unchanged_source_sha256": "37ae04cf80918b39077325f0201a75474d571196f30700b1d44e99dfbd92fb3e",
       "source_sha256": "92043ef713a67a6dc8fa6d4d3f9cea1f386f3f736f97584bb47f8257f35d66ac"
+    },
+    "H4": {
+      "h3_commit": "35cc6bda8c014ca545f90f5b145b716bbcf68593",
+      "h3_source_sha256": "92043ef713a67a6dc8fa6d4d3f9cea1f386f3f736f97584bb47f8257f35d66ac",
+      "path": "pystove/pystove.py",
+      "method_bodies": [
+        "Stove.get_data"
+      ],
+      "unchanged_source_sha256": "4174cf69733cf7b6cd474c9e009112568ed76ea718e8c9b2e56b42aacda4e02e",
+      "source_sha256": "5c22524424f60d550b059dc52994640bcfb6941e6a0ad59bec99046408cd9569"
     }
   }
 }

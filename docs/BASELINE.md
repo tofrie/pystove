@@ -1,7 +1,8 @@
 # Compatibility baseline and first-phase boundaries
 
 The reference contract and first-phase boundaries below record Phase 1. The
-subsequent approved H3 correction is described in [H3 follow-up](#h3-follow-up).
+subsequent corrections are described in [H3 follow-up](#h3-follow-up) and
+[H4 follow-up](#h4-follow-up).
 
 ## Reference artifacts
 
@@ -436,3 +437,59 @@ finish. A finalizer or `close()` that never returns delays error/cancellation
 propagation; adding a timeout is outside H3. If `close()` itself fails before
 closing its resource, successful closure cannot be guaranteed; its error is
 logged and the original initialization cause still propagates.
+
+## H4 follow-up
+
+The H4-only branch starts from approved H3 commit
+`35cc6bda8c014ca545f90f5b145b716bbcf68593`, retaining version `0.3a2.dev0` and the
+published 0.3a1 successful-data contract. Only `get_data()`'s body changes.
+
+Exactly **36 raw fields** are required by the released method; none has a default
+or may be omitted. Additional fields are optional and ignored:
+
+| Group | Required raw fields | Existing processing retained |
+| --- | --- | --- |
+| States | `phase`, `operation_mode`, `night_lowering` | Existing list indexing and state strings, including bool and in-range negative integer indices |
+| Stove clock | `year`, `month`, `day`, `hours`, `minutes`, `seconds` | Builtin naive `datetime`, raw month 1–12 and calendar validation; no new coercion |
+| Refuel duration | `new_fire_wood_hours`, `new_fire_wood_minutes` | Builtin `timedelta`; ints, floats, bools, negative values and minutes beyond 59 remain processable; estimate is stove datetime plus duration |
+| Night interval | `night_begin_hour`, `night_begin_minute`, `night_end_hour`, `night_end_minute` | Builtin naive `time`; unchanged hour/minute ranges and integer semantics |
+| Alarms | `maintenance_alarms`, `safety_alarms` | Integer bitmasks, including bools, negative masks and additional high bits; unchanged ordered string lists, duplicate labels and `[]` for no known bits |
+| Measurements | `stove_temperature`, `room_temperature`, `oxygen_level` | Exact `int(raw / 100)`, truncating toward zero; no blanket size restriction if conversion succeeds |
+| Versions | `version_major`, `version_minor`, `version_build`, `remote_version_major`, `remote_version_minor`, `remote_version_build` | Existing f-string formatting, without new integer/type restrictions |
+| Pass-through | `algorithm`, `burn_level`, `message_id`, `refill_alarm`, `remote_refill_alarm`, `time_since_remote_msg`, `updating`, `valve1_position`, `valve2_position`, `valve3_position` | Raw JSON values and types, without new numeric normalization |
+
+Native dictionaries, dictionary subclasses and mutable mapping objects such as
+`UserDict` remain processable. Read-only mappings do not meet the legacy sensor
+mutation contract. Empty, absent, non-mapping or incomplete status returns `None`.
+Unprocessable state indices, datetime/time values, refuel durations/estimates,
+alarm masks or scaled measurements also return `None` for the complete fetch.
+No partial result or fabricated `UNKNOWN` values are introduced.
+
+Validation checks presence before parsing and catches only `TypeError`,
+`ValueError`, `IndexError` and `OverflowError` around builtin data conversions.
+Fetching, alarm helpers, version formatting, raw-mapping updates and result
+construction are outside those catches. Unexpected internal errors propagate;
+`CancelledError`, `SystemExit`, `KeyboardInterrupt` and other `BaseException`
+cases are never translated into `None`. No public exception hierarchy is added.
+
+Each failed status validation emits at most one WARNING through the existing
+logger. The message names a missing field, expected mapping shape or conversion
+field/category plus exception class. It includes no raw value, response body or
+traceback. Valid status emits no new validation message. Existing `_get_json()`
+logging remains unchanged, including its legacy malformed-JSON body logging;
+that broader transport logging issue is outside H4.
+
+All eleven H4 xfail parameter cases now pass as regular regressions. The eleven
+other xfails and all H3 tests remain unchanged. The new status suite compares
+valid fixtures with a SHA-256-checked literal of the released method: all 25
+keys, their order, values, exact types, sensor mutation and status GET remain
+identical. Tests deliberately cover successful legacy edge cases so validation
+does not silently narrow real firmware compatibility.
+
+The separate H4 artifact approval preserves every original 0.3a1/H3 hash and
+pins both the reviewed full source hash and all H3-base bytes outside
+`get_data()`. Session lifecycle, transport, constants, commands, endpoints,
+request payloads/serialization, headers, timeouts, retries and successful
+request order are unchanged. No Home Assistant files or dependencies change.
+The integration's existing `data is None` branch handles failed status retrieval.
+No hardware access is needed for these synthetic-data checks.
