@@ -413,7 +413,7 @@ class Stove:
     async def set_burn_level(self, burn_level):
         """Set the desired burnlevel."""
         data = {DATA_LEVEL: burn_level}
-        json_str = await self._post(
+        json_str = await self._post_command(
             "http://" + self.stove_host + STOVE_BURN_LEVEL_URL, data
         )
         if json_str is None:
@@ -448,7 +448,7 @@ class Stove:
             DATA_END_HOUR: end.hour,
             DATA_END_MINUTE: end.minute,
         }
-        json_str = await self._post(
+        json_str = await self._post_command(
             "http://" + self.stove_host + STOVE_NIGHT_TIME_URL, data
         )
         if json_str is None:
@@ -464,7 +464,7 @@ class Stove:
         else:
             cur_state = not state
         data = {DATA_ENABLE: 0 if cur_state else 1}
-        json_str = await self._post(
+        json_str = await self._post_command(
             "http://" + self.stove_host + STOVE_REMOTE_REFILL_ALARM_URL, data
         )
         if json_str is None:
@@ -484,7 +484,7 @@ class Stove:
             "minutes": new_time.minute,
             "seconds": new_time.second,
         }
-        json_str = await self._post(
+        json_str = await self._post_command(
             "http://" + self.stove_host + STOVE_SET_TIME_URL, data
         )
         if json_str is None:
@@ -660,6 +660,23 @@ class Stove:
         try:
             async with self._session.get(url) as response:
                 return await response.text()
+        except aiohttp.client_exceptions.ClientConnectorError:
+            _LOGGER.error("Could not connect to stove.")
+
+    async def _post_command(self, url, data):
+        """Post a command; approved body-read failures leave success unconfirmed."""
+        try:
+            async with self._session.post(
+                url, data=json.dumps(data, separators=(",", ":"))
+            ) as response:
+                try:
+                    return await response.text()
+                except (
+                    aiohttp.ClientPayloadError,
+                    aiohttp.ServerDisconnectedError,
+                    TimeoutError,
+                ):
+                    return None
         except aiohttp.client_exceptions.ClientConnectorError:
             _LOGGER.error("Could not connect to stove.")
 

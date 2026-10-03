@@ -1,6 +1,14 @@
 # pystove Changelog
 
 ### 0.3a2.dev0 (unreleased)
+- H6 response-read follow-up: four POST setters return `False` for existing
+  ClientPayloadError, ServerDisconnectedError or TimeoutError raised specifically
+  while reading their response body. Preserve request/context errors, cancellation,
+  HTTP-status behavior, successful requests and the previous JSON parser.
+- Keep original `_post()` behavior for identification/file operations; add no retry,
+  timeout setting or inferred stove state. Exactly six expected failures remain.
+- Add stage-specific fault injection and direct command comparisons against the
+  approved parser-phase commit, including installed-wheel checks and scope hashes.
 - H6 POST response follow-up: return `False` for malformed JSON or non-object
   JSON confirmations in the four POST setters. Preserve successful commands,
   transport behavior and all nine remaining expected failures. `False` means

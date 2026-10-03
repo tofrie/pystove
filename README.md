@@ -8,7 +8,11 @@ failed or cancelled initialization. H4 makes invalid or incomplete status data
 return `None`; successful data retains the exact baseline values and types.
 The narrow H6 follow-up returns `False` for malformed/non-object JSON in POST
 setter confirmations. This means success is unconfirmed, not that the command
-was not executed; no retry is added. Other runtime defects remain unchanged. See the exact
+was not executed; no retry is added. A separate H6 follow-up handles only
+ClientPayloadError, ServerDisconnectedError and existing TimeoutError during
+POST command body reading, using the same unconfirmed-success meaning. Request
+setup, context errors, HTTP statuses and timeout settings remain unchanged.
+Other runtime defects remain unchanged. See the exact
 [compatibility contract](docs/BASELINE.md) and [development checks](docs/DEVELOPMENT.md).
 
 ### Contents

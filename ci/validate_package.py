@@ -8,6 +8,8 @@ the existing get_data body, including all lifecycle and transport code. Each
 approval also requires the exact separately reviewed full source hash. H6 restores
 only four POST response expressions and removes its private parser to recover
 the complete, hash-pinned H4 source; all request construction stays frozen.
+The later H6 response-read scope removes only _post_command and restores four
+call targets to recover the exact parser-phase source, including its parser.
 """
 
 import argparse
@@ -87,7 +89,10 @@ def validate_runtime_source(name, data, baseline):
     expected = baseline["runtime_sha256"][name]
     reviewed = baseline.get("reviewed_runtime_changes", {})
     if reviewed:
-        if set(reviewed) not in ({"H3"}, {"H3", "H4"}, {"H3", "H4", "H6"}):
+        if set(reviewed) not in (
+            {"H3"}, {"H3", "H4"}, {"H3", "H4", "H6"},
+            {"H3", "H4", "H6", "H6_POST_RESPONSE_TRANSPORT"},
+        ):
             raise ValidationError(
                 "Only the reviewed H3/H4/H6 runtime changes are allowed"
             )
@@ -135,7 +140,31 @@ def validate_runtime_source(name, data, baseline):
                     != status_change["source_sha256"]
                 ):
                     raise ValidationError("Reviewed H6 runtime scope changed")
-                if name == post_change["path"]:
+                if "H6_POST_RESPONSE_TRANSPORT" in reviewed:
+                    if post_change["source_sha256"] != (
+                        "0e01238ef052cdb501674f73e4bac79db22dd6d26c32cfa9f2e74747b435d782"
+                    ):
+                        raise ValidationError("Historical H6 parser approval changed")
+                    transport = reviewed["H6_POST_RESPONSE_TRANSPORT"]
+                    if (
+                        transport["path"] != post_change["path"]
+                        or transport["base_commit"]
+                        != "9865615a2509aa13897f5e2b84e6a89310fa0ee3"
+                        or transport["command_call_sites"] != POST_RESPONSE_METHODS
+                        or transport["added_private_method"] != "Stove._post_command"
+                        or transport["unchanged_source_sha256"]
+                        != post_change["source_sha256"]
+                    ):
+                        raise ValidationError("Reviewed H6 response-read scope changed")
+                    if name == transport["path"]:
+                        if post_transport_scope_hash(data) != (
+                            transport["unchanged_source_sha256"]
+                        ):
+                            raise ValidationError(
+                                "Runtime outside H6 POST response reading changed"
+                            )
+                        expected = transport["source_sha256"]
+                elif name == post_change["path"]:
                     if post_response_scope_hash(data) != (
                         post_change["unchanged_source_sha256"]
                     ):
@@ -295,6 +324,67 @@ def post_response_scope_hash(data):
     return hashlib.sha256(data).hexdigest()
 
 
+def post_transport_scope_hash(data):
+    """Recover the parser-phase source, removing only its new command path."""
+    tree = ast.parse(data.decode("utf-8"))
+    stoves = [
+        node for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "Stove"
+    ]
+    if len(stoves) != 1:
+        raise ValidationError("H6 response reading requires exactly one Stove")
+    stove = stoves[0]
+    helpers = [
+        node for node in stove.body
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "_post_command"
+    ]
+    if len(helpers) != 1:
+        raise ValidationError("H6 response reading requires one _post_command")
+    helper = helpers[0]
+    following = stove.body[stove.body.index(helper) + 1:]
+    if (
+        helper.decorator_list
+        or not following
+        or not isinstance(following[0], ast.AsyncFunctionDef)
+        or following[0].name != "_post"
+    ):
+        raise ValidationError("H6 command helper must immediately precede _post")
+    lines = data.splitlines(keepends=True)
+    start = sum(map(len, lines[:helper.lineno - 1]))
+    end = sum(map(len, lines[:following[0].lineno - 1]))
+    statement_end = (
+        sum(map(len, lines[:helper.end_lineno - 1])) + helper.end_col_offset
+    )
+    if data[statement_end:end].strip():
+        raise ValidationError("H6 command helper must have only trailing whitespace")
+    ranges = [(start, end, b"")]
+    for qualified_name in POST_RESPONSE_METHODS:
+        methods = [
+            node for node in stove.body
+            if isinstance(node, ast.AsyncFunctionDef)
+            and node.name == qualified_name.split(".")[1]
+        ]
+        if len(methods) != 1:
+            raise ValidationError(f"H6 requires exactly one {qualified_name}")
+        calls = [
+            node for node in ast.walk(methods[0])
+            if isinstance(node, ast.Attribute)
+            and isinstance(node.value, ast.Name) and node.value.id == "self"
+            and node.attr == "_post_command"
+        ]
+        if len(calls) != 1:
+            raise ValidationError("H6 requires one command call per POST setter")
+        call = calls[0]
+        start = sum(map(len, lines[:call.lineno - 1])) + call.col_offset
+        end = sum(map(len, lines[:call.end_lineno - 1])) + call.end_col_offset
+        if data[start:end] != b"self._post_command":
+            raise ValidationError("H6 permits only the reviewed command call")
+        ranges.append((start, end, b"self._post"))
+    for start, end, replacement in sorted(ranges, reverse=True):
+        data = data[:start] + replacement + data[end:]
+    return hashlib.sha256(data).hexdigest()
+
+
 def validate_sources(repo_root=ROOT):
     repo_root = Path(repo_root)
     baseline = load_baseline(repo_root)
@@ -434,6 +524,8 @@ def required_sdist_sources(repo_root=ROOT):
         "tests/test_create_lifecycle.py",
         "tests/test_status_validation.py",
         "tests/test_post_response_validation.py",
+        "tests/test_post_response_transport.py",
+        "tests/fixtures/h6_post_response_commands.json",
         "tests/fixtures/h4_commands.json",
         "tests/test_known_failures.py",
         "tests/test_packaging.py",

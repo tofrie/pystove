@@ -148,7 +148,7 @@ def write_sdist(path, *, omit=None, mutate=None, special=None):
             archive.addfile(special)
 
 
-def test_runtime_and_cli_match_baseline_plus_reviewed_h3_h4_and_h6_fixes():
+def test_runtime_and_cli_match_all_reviewed_scopes():
     baseline, version = validator.validate_sources(ROOT)
     assert version != baseline["version"]
     assert ".dev" in version
@@ -196,7 +196,7 @@ def test_h3_body_mutation_requires_new_explicit_reviewed_source_hash():
         source
     )
     with pytest.raises(
-        validator.ValidationError, match="outside H6 POST response decoding"
+        validator.ValidationError, match="outside H6 POST response reading"
     ):
         validator.validate_runtime_source("pystove/pystove.py", changed, baseline)
 
@@ -253,7 +253,7 @@ def test_h4_body_is_frozen_during_h6():
     assert changed != source
     assert validator.status_scope_hash(changed) == validator.status_scope_hash(source)
     with pytest.raises(
-        validator.ValidationError, match="outside H6 POST response decoding"
+        validator.ValidationError, match="outside H6 POST response reading"
     ):
         validator.validate_runtime_source("pystove/pystove.py", changed, baseline)
 
@@ -403,7 +403,7 @@ def test_wheel_rejects_runtime_changes_even_with_valid_record(tmp_path):
 
     write_wheel(wheel, mutate=mutate)
     with pytest.raises(
-        validator.ValidationError, match="outside H6 POST response decoding"
+        validator.ValidationError, match="outside H6 POST response reading"
     ):
         validator.validate_wheel(wheel, ROOT)
 
@@ -450,6 +450,8 @@ def test_wheel_rejects_broken_record(tmp_path, change):
         "tests/test_create_lifecycle.py",
         "tests/test_status_validation.py",
         "tests/test_post_response_validation.py",
+        "tests/test_post_response_transport.py",
+        "tests/fixtures/h6_post_response_commands.json",
         "tests/fixtures/h4_commands.json",
         "tests/fixtures/hwam_contract.json",
         "ci/compatibility_baseline.json",
@@ -546,12 +548,12 @@ def test_new_h6_hash_cannot_change_requests_or_other_runtime(original, replaceme
         changed
     ).hexdigest()
     with pytest.raises(
-        validator.ValidationError, match="outside H6 POST response decoding"
+        validator.ValidationError, match="Historical H6 parser approval changed"
     ):
         validator.validate_runtime_source("pystove/pystove.py", changed, baseline)
 
 
-def test_h6_parser_mutation_requires_explicit_source_hash():
+def test_h6_parser_is_frozen_during_response_read_changes():
     baseline = validator.load_baseline(ROOT)
     source = (ROOT / "pystove/pystove.py").read_bytes()
     changed = source.replace(b"except json.JSONDecodeError:", b"except Exception:", 1)
@@ -559,7 +561,9 @@ def test_h6_parser_mutation_requires_explicit_source_hash():
     assert validator.post_response_scope_hash(changed) == (
         validator.post_response_scope_hash(source)
     )
-    with pytest.raises(validator.ValidationError, match="Frozen runtime changed"):
+    with pytest.raises(
+        validator.ValidationError, match="outside H6 POST response reading"
+    ):
         validator.validate_runtime_source("pystove/pystove.py", changed, baseline)
 
 
@@ -577,6 +581,75 @@ def test_h6_review_cannot_be_expanded(field, value):
     baseline = validator.load_baseline(ROOT)
     baseline["reviewed_runtime_changes"]["H6"][field] = value
     with pytest.raises(validator.ValidationError, match="H6 runtime scope changed"):
+        validator.validate_runtime_source(
+            "pystove/pystove.py", (ROOT / "pystove/pystove.py").read_bytes(), baseline
+        )
+
+
+@pytest.mark.parametrize(
+    ("original", "replacement"),
+    [
+        (b'DATA_LEVEL = "level"', b'DATA_LEVEL = "changed"'),
+        (b'"Accept": "application/json"', b'"Accept": "changed"'),
+        (b"data = {DATA_LEVEL: burn_level}", b"data = {DATA_LEVEL: 99}"),
+        (b"async def set_time(self, new_time=None):",
+         b"async def set_time(self, new_time=False):"),
+        (b"self._session.get(url)", b"self._session.get(url, timeout=1)"),
+        (b"return result.get(DATA_RESPONSE) == RESPONSE_OK",
+         b"return bool(result.get(DATA_RESPONSE))"),
+        (b'"""Call get_raw_data, process result before returning."""',
+         b'"""Unreviewed status edit."""'),
+        (b'"""Async create the Stove object."""',
+         b'"""Unreviewed lifecycle edit."""'),
+        (b"except json.JSONDecodeError:", b"except Exception:"),
+        (b'"""Post data to url, return response."""',
+         b'"""Unreviewed file transport edit."""'),
+    ],
+)
+def test_new_read_hash_cannot_change_frozen_runtime(original, replacement):
+    baseline = validator.load_baseline(ROOT)
+    source = (ROOT / "pystove/pystove.py").read_bytes()
+    changed = source.replace(original, replacement, 1)
+    assert changed != source
+    baseline["reviewed_runtime_changes"]["H6_POST_RESPONSE_TRANSPORT"][
+        "source_sha256"
+    ] = hashlib.sha256(changed).hexdigest()
+    with pytest.raises(
+        validator.ValidationError, match="outside H6 POST response reading"
+    ):
+        validator.validate_runtime_source("pystove/pystove.py", changed, baseline)
+
+
+def test_command_helper_change_requires_explicit_source_hash():
+    baseline = validator.load_baseline(ROOT)
+    source = (ROOT / "pystove/pystove.py").read_bytes()
+    changed = source.replace(
+        b"                    aiohttp.ClientPayloadError,",
+        b"                    aiohttp.ClientError,",
+        1,
+    )
+    assert changed != source
+    assert validator.post_transport_scope_hash(changed) == (
+        validator.post_transport_scope_hash(source)
+    )
+    with pytest.raises(validator.ValidationError, match="Frozen runtime changed"):
+        validator.validate_runtime_source("pystove/pystove.py", changed, baseline)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("path", "pystove/__init__.py"),
+        ("base_commit", "unreviewed"),
+        ("command_call_sites", ["Stove._identify"]),
+        ("added_private_method", "Stove._post"),
+        ("unchanged_source_sha256", "unreviewed"),
+    ],
+)
+def test_response_read_review_cannot_be_expanded(field, value):
+    baseline = validator.load_baseline(ROOT)
+    baseline["reviewed_runtime_changes"]["H6_POST_RESPONSE_TRANSPORT"][field] = value
+    with pytest.raises(validator.ValidationError, match="H6 response-read scope"):
         validator.validate_runtime_source(
             "pystove/pystove.py", (ROOT / "pystove/pystove.py").read_bytes(), baseline
         )

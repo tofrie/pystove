@@ -91,29 +91,44 @@ def test_unexpected_decoder_errors_propagate(
     [aiohttp.ClientPayloadError, aiohttp.ServerDisconnectedError, TimeoutError,
      asyncio.CancelledError],
 )
-def test_transport_errors_remain_outside_response_parser(
-    stove, session, method, arguments, error_type
+def test_transport_errors_raised_by_decoder_still_propagate(
+    stove, session, monkeypatch, method, arguments, error_type
 ):
-    error = error_type("response read failure")
-    session.queue_text("", method="POST", text_error=error)
+    error = error_type("unexpected decoder failure")
+
+    def fail_decode(body):
+        raise error
+
+    session.queue_text('{"response":"OK"}', method="POST")
+    monkeypatch.setattr(runtime.json, "loads", fail_decode)
     with pytest.raises(error_type) as raised:
         asyncio.run(getattr(stove, method)(*arguments))
     assert raised.value is error
     assert len(session.calls) == 1
 
 
-@pytest.fixture
-def h4_stove_class(monkeypatch):
-    """Load six literal H4 commands; never generate expectations from current code."""
-    source = (Path(__file__).parent / "fixtures" / "h4_commands.json").read_bytes()
-    assert hashlib.sha256(source).hexdigest() == (
-        "68507ad1e561dcf982e3de132356f2c9a705ab3d12bfa549470e1f7b7150795d"
-    )
+@pytest.fixture(params=[
+    (
+        "h4_commands.json",
+        "68507ad1e561dcf982e3de132356f2c9a705ab3d12bfa549470e1f7b7150795d",
+        "82c8438ed046261c2e29bf3af01fe6f65fc89bb5",
+        "5c22524424f60d550b059dc52994640bcfb6941e6a0ad59bec99046408cd9569",
+    ),
+    (
+        "h6_post_response_commands.json",
+        "cd056b96dd1d9123282b0347fb7bf57d29778d6878ece77019b72ffe265be7de",
+        "9865615a2509aa13897f5e2b84e6a89310fa0ee3",
+        "0e01238ef052cdb501674f73e4bac79db22dd6d26c32cfa9f2e74747b435d782",
+    ),
+], ids=["H4", "H6-post-response"])
+def reference_stove_class(monkeypatch, request):
+    """Load pinned original commands, independently of current implementation."""
+    filename, digest, commit, source_digest = request.param
+    source = (Path(__file__).parent / "fixtures" / filename).read_bytes()
+    assert hashlib.sha256(source).hexdigest() == digest
     fixture = json.loads(source)
-    assert fixture["commit"] == "82c8438ed046261c2e29bf3af01fe6f65fc89bb5"
-    assert fixture["source_sha256"] == (
-        "5c22524424f60d550b059dc52994640bcfb6941e6a0ad59bec99046408cd9569"
-    )
+    assert fixture["commit"] == commit
+    assert fixture["source_sha256"] == source_digest
 
     class FixedDateTime(datetime):
         @classmethod
@@ -124,9 +139,9 @@ def h4_stove_class(monkeypatch):
     methods = {}
     for name, literal in fixture["methods"].items():
         namespace = vars(runtime).copy()
-        exec(compile(textwrap.dedent(literal), f"<H4 {name}>", "exec"), namespace)
+        exec(compile(textwrap.dedent(literal), f"<{commit} {name}>", "exec"), namespace)
         methods[name] = namespace[name]
-    return type("H4Commands", (Stove,), methods)
+    return type("ReferenceCommands", (Stove,), methods)
 
 
 COMMAND_CASES = [
@@ -157,11 +172,11 @@ COMMAND_CASES = [
     ['{"response":"OK"}', ' { "response" : "OK", "extra": 1 } ',
      '{"response":"NOT_OK"}', "{}", '{"response":null}'],
 )
-def test_command_results_and_exact_requests_match_h4(
-    h4_stove_class, raw_data, method, arguments, reads_status, body
+def test_command_results_and_exact_requests_match_reference(
+    reference_stove_class, raw_data, method, arguments, reads_status, body
 ):
     observed = []
-    for cls in (h4_stove_class, Stove):
+    for cls in (reference_stove_class, Stove):
         session = FakeSession()
         instance = cls()
         instance.stove_host = "stove.test"

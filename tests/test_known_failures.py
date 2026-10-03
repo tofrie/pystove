@@ -152,17 +152,11 @@ def test_command_rejects_http_error_status(
     [aiohttp.ClientPayloadError, aiohttp.ServerDisconnectedError, TimeoutError],
     ids=["incomplete-body", "connection-lost", "read-timeout"],
 )
-@pytest.mark.xfail(
-    strict=True,
-    raises=_KnownLegacyFailure,
-    reason=(
-        "Audit H6; baseline 0.3a1: command response transport failures escape unhandled"
-    ),
-)
 def test_command_rejects_response_transport_failure(stove, session, legacy_error):
+    """Audit H6 regression: approved POST body-read failures are unconfirmed."""
     error = legacy_error("scripted response transport failure")
     session.queue_text("", method="POST", text_error=error)
-    _expect_rejection(stove.set_burn_level(3), legacy_error, result=False)
+    assert asyncio.run(stove.set_burn_level(3)) is False
 
 
 @pytest.mark.xfail(

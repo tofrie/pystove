@@ -91,7 +91,8 @@ SHA-256-checked literal. Its valid-fixture comparisons check each of the 25 keys
 values and exact types, including successful legacy edge cases. All 29 H3
 regressions remain; the eleven former H4 expected failures now assert `None`.
 After the H6 POST response follow-up, two more cases are regular regressions;
-the remaining nine strict expected failures are unchanged.
+nine strict expected failures remain at that point. The subsequent H6 response-read
+follow-up converts exactly three of those; six strict expected failures remain.
 
 Ruff only checks files. The narrow CLI suppressions preserve existing import and
 string-formatting style without excluding the CLI from other lint rules. The
@@ -101,14 +102,16 @@ pyupgrade hooks are not installed. New test/build files receive the normal rules
 ## Phase boundary
 
 The runtime fixes after Phase 1 are H3 initialization cleanup, H4 status input
-validation and H6 POST response JSON validation. H4 changes only `get_data()`
+validation, H6 POST response JSON validation and the later narrow H6 response-read
+error handling. H4 changes only `get_data()`
 failure handling; its successful conversions remain compatible. H6 changes only
-malformed/non-object confirmations for four POST setters. No network, timeout,
-retry, protocol, HTTP-status, live-data, self-test or file-operation defects are fixed. Runtime dependencies and
+malformed/non-object confirmations and three body-read error types for four POST
+setters. Timeout configuration, retries, protocol, HTTP-status handling, live-data,
+self-test and file operations remain unchanged. Runtime dependencies and
 the HA integration remain unchanged. Exact validation, logging and limitations
 are recorded in [BASELINE.md](BASELINE.md#h4-follow-up). The workflow contains no
-publishing, deployment or secret-dependent steps. H3/H4 and the narrow H6 parser scope are checked without
-hardware; later communication changes still need the hardware gates from the audit.
+publishing, deployment or secret-dependent steps. H3/H4 and both narrow H6 scopes
+are checked without hardware; later communication changes still need the hardware gates from the audit.
 
 
 The H6 checks are in `tests/test_post_response_validation.py` and run against the
@@ -116,3 +119,12 @@ installed wheel too. `tests/fixtures/h4_commands.json` preserves the six H4
 command methods with a pinned fixture hash for direct comparisons. See
 [H6 POST response follow-up](BASELINE.md#h6-post-response-follow-up) for exact
 failure semantics and scope. No new runtime dependency is required.
+
+
+The response-read phase adds `tests/test_post_response_transport.py` and the
+pinned `tests/fixtures/h6_post_response_commands.json` reference. All are tested
+from the installed wheel. The `H6_POST_RESPONSE_TRANSPORT` artifact entry names
+a subscope of H6, not a different audit finding. It preserves the parser-phase
+approval and reconstructs that exact source by removing one private method and
+restoring four call targets. See
+[H6 POST response-read follow-up](BASELINE.md#h6-post-response-read-follow-up).

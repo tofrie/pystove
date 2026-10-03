@@ -542,3 +542,62 @@ Synthetic response tests need no hardware for this parsing-only scope. They do
 not establish real firmware HTTP status conventions or actual command execution
 after a lost response. H5 timeout tuning, H7 retry assessment, H9 file concurrency,
 L2 transport logging and the broader M1/M2 findings remain separate work.
+
+
+## H6 POST response-read follow-up
+
+This second, independent H6 subscope starts from parser-phase commit
+`9865615a2509aa13897f5e2b84e6a89310fa0ee3`; version remains `0.3a2.dev0`.
+The four POST setters now use the private `_post_command()` request path. It
+retains the exact request construction and legacy connector-error behavior of
+`_post()`, but adds a catch only around `await response.text()` inside the
+already-entered response context. Exactly `aiohttp.ClientPayloadError`,
+`aiohttp.ServerDisconnectedError` and `TimeoutError` are treated as an absent
+confirmation. The existing setter path then returns `False` and logs its usual
+brief message, without response contents, exception text or a traceback.
+
+The exception class does not determine the stage at which a failure occurred.
+The documented three xfails inject their error during body reading. The same
+classes raised during serialization, request construction, context entry or
+context exit are outside the new catch and still propagate. Boundary tests
+exercise these stages separately. No new timeout is created or configured.
+
+Cancellation, memory errors, process-control exceptions and unexpected errors
+propagate. Other previously unhandled aiohttp errors still propagate. Existing
+`ClientConnectorError` handling is deliberately retained, not broadened.
+The JSON parser `_post_response_ok()` is byte-identical to the approved parser
+phase; it does not absorb transport exceptions raised from decoding itself.
+
+False means there is no reliable success confirmation, not that the command
+was not executed. There is no retry, additional request or assumed local state.
+Responses still leave their context on failure. Cleanup/context-exit errors are
+not converted into False by the new body-read handler.
+
+The shared `_post()` remains byte-identical for identification and file reads.
+GET commands, preliminary status GETs, `_get_json()`, H3 lifecycle, H4 status
+validation, live history and self-test are unchanged. Status 500 with an OK
+body is still accepted; both HTTP-status xfails intentionally remain xfail.
+
+Exactly three response-read xfails become regressions. Six strict xfails remain:
+H6 HTTP status POST/GET (2), M1 live-data failures (3) and M2 self-test polling (1).
+The new tests cover all four POST setters, approved and unapproved exceptions,
+request/context/read/exit boundaries, response cleanup, no retries, no inferred
+state and bounded existing logging. An AST comparison also verifies that the
+new request helper differs from `_post()` only in its name, docstring and the
+approved inner body-read catch.
+
+The SHA-256-pinned `h6_post_response_commands.json` fixture contains all six
+original commands from the exact parser-phase commit. Direct comparisons verify
+results, types and complete request sequences against both that commit and H4.
+Existing success and malformed/non-object JSON matrices remain in force.
+
+The new artifact approval preserves all historical H3/H4/H6 metadata. Removing
+only `_post_command()` and restoring four call targets must reproduce the exact
+parser-phase source hash. This freezes the parser, original transport methods,
+request arguments, public signatures and all other runtime bytes. The complete
+new source hash is checked separately. The suite and reference fixture are
+included in sdist validation and installed-wheel verification.
+
+No hardware access is needed for this handling of simulated existing read
+errors. Tests do not prove whether a controller executed an unconfirmed command,
+validate real response-loss behavior or establish HTTP status conventions.
