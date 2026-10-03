@@ -1,5 +1,18 @@
 # pystove Changelog
 
+### 0.3a2.dev0 (unreleased)
+- Establish published `0.3a1` / commit `6d2f7844d3fa49a339820c446aa47ba29e60e94a`
+  as the compatibility reference for `hwam_stove` commit
+  `2176600eece1c644f594a9608186bf395bb2488b`.
+- Add offline API, data and exact command-request characterization tests.
+- Record known legacy defects with strict expected-failure tests; do not fix them.
+- Read the single version source without importing runtime dependencies during builds.
+- Add an explicit isolated build backend, archive validation and installed-wheel tests.
+- Pin development tools, use Ruff only in check mode and add Python 3.11–3.13 CI.
+- Keep runtime imports, dependencies, parsing and HWAM communication unchanged.
+
+`0.3a1` remains the compatibility baseline; `0.3a2.dev0` is not a PyPI release.
+
 ###
 - Add CHANGELOG.md
 - Add vscode devcontainer setup and dependabot config (#2) (thanks @lordyavin)

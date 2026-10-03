@@ -1,0 +1,18 @@
+{
+  "repository": "mvn23/pystove",
+  "commit": "6d2f7844d3fa49a339820c446aa47ba29e60e94a",
+  "tag": "0.3a1",
+  "version": "0.3a1",
+  "wheel_sha256": "0a7432f79e7e428ba04f897cb6a23108c294c6bf52dc6fdeb58108eff3408581",
+  "sdist_sha256": "326691219cf0cb6f1160df0c32e9422bdd119918c88ba8919458ae60f61fc674",
+  "hwam_stove_commit": "2176600eece1c644f594a9608186bf395bb2488b",
+  "runtime_requires_dist": [
+    "aiohttp"
+  ],
+  "runtime_sha256": {
+    "pystove/__init__.py": "d72dcfa678bc6194a5f3aedb7379d2beb3a1392f9696d22cbca16bb1d5358bdf",
+    "pystove/pystove.py": "728568447d4442b2056f9cc80f12fe43e08f3d97c86160105218f02925ed7445",
+    "pystove/version.py": "f9ed531d812e7ef01ee6a101b74698cc0705647d07a11aca41b748a578828914",
+    "pystove_cli.py": "974234ea3eeb6f7e2a5a2110b4a79a6592df9efd34f6cc9f74dfdb3f52c4da0d"
+  }
+}
