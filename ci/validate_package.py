@@ -533,6 +533,7 @@ def required_sdist_sources(repo_root=ROOT):
     }
     for directory, suffixes in (
         ("ci", {".py", ".json"}),
+        ("diagnostics", {".py"}),
         ("tests", {".py", ".json"}),
         ("docs", {".md"}),
     ):

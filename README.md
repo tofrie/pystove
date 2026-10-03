@@ -1,5 +1,9 @@
 # pystove
 
+For a separate, strictly read-only hardware diagnostic, see
+[HWAM read-only probe](docs/HWAM_READONLY_PROBE.md). It does not initialize the
+library or change its runtime behavior.
+
 An async python library with command line interface to interact with HWAM SmartControl wood burning stoves.
 
 The development version `0.3a2.dev0` preserves the published `0.3a1` successful API
