@@ -11,8 +11,10 @@ import tempfile
 import venv
 
 if __package__:
+    from .check_test_results import verify as verify_test_results
     from .validate_package import ROOT, ValidationError, validate_wheel
 else:
+    from check_test_results import verify as verify_test_results
     from validate_package import ROOT, ValidationError, validate_wheel
 
 CONTRACT_TESTS = (
@@ -67,38 +69,6 @@ def runtime_identity(python, environment, cwd):
     return runtime_configuration(python, environment, cwd)["identity"]
 
 
-def link_parent_site_packages(python, configuration, environment, cwd):
-    """Append active parent sites after child-local packages, without .pth code."""
-    result = subprocess.run(
-        [
-            str(python),
-            "-I",
-            "-c",
-            "import json, sys, sysconfig; "
-            "print(json.dumps([sys.prefix, sysconfig.get_path('purelib')]))",
-        ],
-        env=environment,
-        cwd=cwd,
-        text=True,
-        capture_output=True,
-        check=True,
-    )
-    prefix, site_packages = map(Path, json.loads(result.stdout))
-    if not site_packages.resolve().is_relative_to(prefix.resolve()):
-        raise RuntimeError("Child site-packages is outside its virtual environment")
-    directories = configuration["site_packages"]
-    origin = Path(configuration["identity"][1])
-    if not any(origin.is_relative_to(Path(directory)) for directory in directories):
-        raise RuntimeError("Parent aiohttp is outside its active site-packages")
-    if any("\n" in directory or "\r" in directory for directory in directories):
-        raise RuntimeError("Parent site-packages path contains a newline")
-    site_packages.mkdir(parents=True, exist_ok=True)
-    (site_packages / "pystove_parent_runtime.pth").write_text(
-        "\n".join(directories) + "\n", encoding="utf-8"
-    )
-    return site_packages
-
-
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dist-dir", type=Path, default=ROOT / "dist")
@@ -136,11 +106,12 @@ def main():
             ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo"),
         )
         shutil.copy2(repo_root / "pyproject.toml", work / "pyproject.toml")
+        subprocess.run(
+            [str(python), "-I",
+             str(repo_root / "ci/check_release_install.py"), "--empty"],
+            env=environment, cwd=work, check=True,
+        )
         parent_runtime = runtime_configuration(sys.executable, environment, work)
-        runtime_before = parent_runtime["identity"]
-        link_parent_site_packages(python, parent_runtime, environment, work)
-        if runtime_identity(python, environment, work) != runtime_before:
-            raise RuntimeError("Child environment did not preserve parent aiohttp")
         install = [
             sys.executable,
             "-I",
@@ -162,13 +133,31 @@ def main():
             cwd=work,
             check=True,
         )
+        # Install only the runtime dependency closure, never parent package paths.
+        subprocess.run(
+            [*(arg for arg in install if arg != "--no-deps"),
+             "aiohttp==" + parent_runtime["identity"][0]],
+            env=environment, cwd=work, check=True,
+        )
+        # Recheck after dependency installation, before introducing our namespace.
+        subprocess.run(
+            [str(python), "-I",
+             str(repo_root / "ci/check_release_install.py"), "--empty"],
+            env=environment, cwd=work, check=True,
+        )
         subprocess.run(
             [*install, str(wheels[0])], env=environment, cwd=work, check=True
         )
-        if runtime_identity(python, environment, work) != runtime_before:
-            raise RuntimeError("Wheel tests changed the pre-existing aiohttp runtime")
+        runtime_before = runtime_identity(python, environment, work)
+        if runtime_before[0] != parent_runtime["identity"][0]:
+            raise RuntimeError("Wheel tests changed the aiohttp version")
+        if not Path(runtime_before[1]).is_relative_to(wheel_environment.resolve()):
+            raise RuntimeError("Runtime dependency escaped the clean environment")
+        subprocess.run(
+            [str(python), "-I", str(repo_root / "ci/check_release_install.py"),
+             "--wheel", str(wheels[0])], env=environment, cwd=work, check=True,
+        )
         script = """
-import json
 import sys
 import sysconfig
 from pathlib import Path
@@ -178,15 +167,14 @@ import pytest
 origin = Path(pystove.__file__).resolve()
 site_packages = Path(sysconfig.get_path("purelib")).resolve()
 checkout = Path(sys.argv[1]).resolve()
-parent_sites = {Path(entry).resolve() for entry in json.loads(sys.argv[2])}
 assert site_packages.is_relative_to(Path(sys.prefix).resolve())
 assert origin.is_relative_to(site_packages), (origin, site_packages)
 assert not origin.is_relative_to(checkout), origin
 for entry in sys.path:
     path = Path(entry).resolve()
-    assert not path.is_relative_to(checkout) or path in parent_sites, entry
+    assert not path.is_relative_to(checkout), entry
 print(f"Testing installed wheel: {origin}", flush=True)
-raise SystemExit(pytest.main(sys.argv[3:]))
+raise SystemExit(pytest.main(sys.argv[2:]))
 """
         subprocess.run(
             [
@@ -195,14 +183,17 @@ raise SystemExit(pytest.main(sys.argv[3:]))
                 "-c",
                 script,
                 str(repo_root),
-                json.dumps(parent_runtime["site_packages"]),
                 "-q",
+                "-W",
+                "error::ResourceWarning",
+                "--junitxml=" + str(work / "wheel-results.xml"),
                 *(str(work / "tests" / name) for name in CONTRACT_TESTS),
             ],
             env=environment,
             cwd=work,
             check=True,
         )
+        verify_test_results(work / "wheel-results.xml")
         if runtime_identity(python, environment, work) != runtime_before:
             raise RuntimeError("Contract tests changed the aiohttp runtime")
 

@@ -519,17 +519,30 @@ def validate_sources(repo_root=ROOT):
     for name in baseline["runtime_sha256"]:
         validate_runtime_source(name, (repo_root / name).read_bytes(), baseline)
     version = read_version(repo_root)
-    if version == baseline["version"] or not re.search(r"\.dev\d+$", version):
-        raise ValidationError("Foundation artifacts require a new development version")
+    if version != "0.3.0rc1":
+        raise ValidationError("Release artifacts require version 0.3.0rc1")
+    release = json.loads((repo_root / "ci/release_baseline.json").read_text())
+    if release["commit"] != "eec0d60a0120140171a7ef2a5b6c6005da04c51b":
+        raise ValidationError("Unexpected release runtime baseline")
+    for name, expected in release["runtime_sha256"].items():
+        digest = baseline_source_hash(name, (repo_root / name).read_bytes(), release)
+        if digest != expected:
+            raise ValidationError(f"Runtime differs from eec0d60: {name}")
     return baseline, version
 
 
 def validate_metadata(data, version, baseline):
     metadata = BytesParser().parsebytes(data)
-    if metadata.get_all("Name") != ["pystove"]:
-        raise ValidationError("Artifact distribution name must be pystove")
+    if metadata.get_all("Name") != ["saynwerk-pystove"]:
+        raise ValidationError("Artifact distribution name must be saynwerk-pystove")
     if metadata.get_all("Version") != [version]:
         raise ValidationError("Artifact version differs from pystove/version.py")
+    if metadata.get_all("Maintainer") != ["Saynwerk"]:
+        raise ValidationError("Artifact maintainer must be Saynwerk")
+    if "Original project, https://github.com/mvn23/pystove" not in metadata.get_all(
+        "Project-URL", []
+    ):
+        raise ValidationError("Artifact must credit the original project")
     if metadata.get_all("Requires-Python") is not None:
         raise ValidationError("This phase must not introduce Requires-Python")
     requirements = metadata.get_all("Requires-Dist", [])
@@ -597,7 +610,7 @@ def validate_wheel(wheel_path, repo_root=ROOT):
             if (member.external_attr >> 16) & 0o170000 == 0o120000:
                 raise ValidationError("Wheel must not contain symbolic links")
             files[member.filename] = archive.read(member)
-    dist_info = f"pystove-{version}.dist-info"
+    dist_info = f"saynwerk_pystove-{version}.dist-info"
     package_files = {
         name for name in baseline["runtime_sha256"] if name.startswith("pystove/")
     }
@@ -676,7 +689,7 @@ def required_sdist_sources(repo_root=ROOT):
 
 def validate_sdist(sdist_path, repo_root=ROOT):
     baseline, version = validate_sources(repo_root)
-    root_name = f"pystove-{version}"
+    root_name = f"saynwerk_pystove-{version}"
     files = {}
     seen = set()
     with tarfile.open(sdist_path, "r:gz") as archive:

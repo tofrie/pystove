@@ -2,14 +2,14 @@
 
 The compatibility reference is published `pystove==0.3a1`, Git commit
 `6d2f7844d3fa49a339820c446aa47ba29e60e94a`. This branch identifies itself as
-`0.3a2.dev0`; it does not adopt the incompatible runtime changes from `master`.
+`saynwerk-pystove==0.3.0rc1`; it does not adopt the incompatible runtime changes from `master`.
 The exact public contract is recorded in [BASELINE.md](BASELINE.md).
 
 ## Supported check matrix
 
-CI checks Python 3.11, 3.12 and 3.13. Python 3.11 matches the repository's existing
+CI checks Python 3.11, 3.12, 3.13 and 3.14.6. Python 3.11 matches the repository's existing
 development-tool target, Python 3.12 matches its existing devcontainer, and Python
-3.13 covers the newer Home Assistant interpreter generation. This is the initial
+3.13 and 3.14 cover newer Home Assistant interpreter generations. This is the
 tested development matrix, not a new runtime `Requires-Python` restriction.
 Older Python versions have not been certified by these checks. The pinned build
 backend itself requires Python 3.10 or newer.
@@ -22,6 +22,7 @@ Use a separate environment, not the production Home Assistant environment:
 python -m venv .venv
 . .venv/bin/activate
 python -m pip install --requirement requirements-dev.txt
+python -I ci/check_release_install.py --empty
 python -m pip install --no-build-isolation --editable .
 ```
 
@@ -35,7 +36,8 @@ unbounded runtime graph can differ between newly created environments.
 ## Required checks
 
 ```sh
-PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest -W error::ResourceWarning --junitxml=test-results.xml
+python ci/check_test_results.py test-results.xml
 python -m ruff check .
 python -m build
 python ci/validate_package.py --dist-dir dist
@@ -52,11 +54,14 @@ package's runtime requirements there.
 
 The wheel check installs the built wheel without dependency resolution into a
 temporary environment, copies the tests outside the checkout, checks the import
-location and runs the compatibility and known-failure tests. It uses the existing
-runtime dependency environment and installs the pinned development tools. It
-does not contact a stove.
+location and exact installed bytes, rejects the original `pystove` distribution,
+and runs the compatibility and known-failure tests. It installs the same aiohttp
+version as its caller plus the pinned development tools into a fresh private
+environment, without inheriting parent site-packages. It does not contact a stove.
+See [Saynwerk release safeguards](SAYNWERK_RELEASE.md).
 
-For an offline build, download the pinned tools once into a temporary wheelhouse
+For an offline build, download the pinned tools and aiohttp dependency wheels
+for each interpreter/platform into a temporary wheelhouse
 and set `PIP_NO_INDEX=1` and `PIP_FIND_LINKS` to its absolute path. Pass the same
 path as `--wheelhouse` to `ci/test_wheel.py`. No wheelhouse or local runtime
 dependency snapshot is committed.
@@ -84,7 +89,7 @@ transport and every other method remain frozen by that historical approval.
 The H6 approval separately pins the complete H4 source: only its new parser and
 four exact response return expressions may differ. Request construction remains
 byte for byte unchanged, including inside those four setters. `__init__.py` and the CLI remain
-byte for byte unchanged; the development version remains `0.3a2.dev0`.
+byte for byte unchanged; the release version is `0.3.0rc1`.
 
 `test_status_validation.py` includes the original 0.3a1 `get_data()` source as a
 SHA-256-checked literal. Its valid-fixture comparisons check each of the 25 keys,

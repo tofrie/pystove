@@ -1,8 +1,8 @@
-# pystove
+# saynwerk-pystove
 
 An async python library with command line interface to interact with HWAM SmartControl wood burning stoves.
 
-The development version `0.3a2.dev0` preserves the published `0.3a1` successful API
+The release candidate `0.3.0rc1` preserves the published `0.3a1` successful API
 and HWAM request contract. Audit H3 now cleans up owned sessions and tasks after
 failed or cancelled initialization. H4 makes invalid or incomplete status data
 return `None`; successful data retains the exact baseline values and types.
@@ -14,6 +14,18 @@ POST command body reading, using the same unconfirmed-success meaning. Request
 setup, context errors, HTTP statuses and timeout settings remain unchanged.
 Other runtime defects remain unchanged. See the exact
 [compatibility contract](docs/BASELINE.md) and [development checks](docs/DEVELOPMENT.md).
+
+Maintained by **Saynwerk** at [tofrie/pystove](https://github.com/tofrie/pystove).
+This GPLv3+ fork credits the original author Milan van Nugteren and
+[mvn23/pystove](https://github.com/mvn23/pystove). It is an independently
+maintained distribution, not an official upstream release.
+
+The distribution is `saynwerk-pystove`; Python imports remain `from pystove import Stove`.
+It depends on `aiohttp`, not on the original `pystove` distribution.
+**Never install both distributions in one environment:** they own the same files.
+Use a fresh virtual environment and the [release checks](docs/SAYNWERK_RELEASE.md).
+Pip cannot enforce this exclusion. Production Home Assistant still pins `pystove==0.3a1`;
+changing that integration dependency is a separate, gated migration.
 
 ### Contents
 - [Usage Example](#usage-example)

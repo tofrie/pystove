@@ -1,5 +1,13 @@
 # pystove Changelog
 
+### 0.3.0rc1 (prepared, not published)
+- Package the validated eec0d60 candidate as `saynwerk-pystove`, maintained by
+  Saynwerk, while retaining the original attribution, GPLv3+ license and `pystove` imports.
+- Freeze all runtime/CLI bytes against that candidate except the version literal.
+- Add exclusive-distribution and exact installed-artifact release gates; use
+  private wheel-test environments without inheriting parent site-packages.
+- No protocol, command, public API or production Home Assistant dependency changes.
+
 ### 0.3a2.dev0 (unreleased)
 - H6 response-read follow-up: four POST setters return `False` for existing
   ClientPayloadError, ServerDisconnectedError or TimeoutError raised specifically

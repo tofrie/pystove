@@ -5,17 +5,15 @@ import csv
 import hashlib
 import io
 import json
-import os
 from pathlib import Path
 import subprocess
 import sys
 import tarfile
-import venv
 import zipfile
 
 import pytest
 
-from ci import test_wheel as wheel_runner, validate_package as validator
+from ci import validate_package as validator
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -63,79 +61,12 @@ def test_info_file_review_cannot_expand_scope(field, value):
         )
 
 
-def test_wheel_environment_keeps_parent_only_runtime_and_child_package_first(tmp_path):
-    environment = os.environ.copy()
-    environment.pop("PYTHONPATH", None)
-    parent = tmp_path / "parent"
-    child = tmp_path / "child"
-    builder = venv.EnvBuilder(with_pip=False, system_site_packages=False)
-    builder.create(parent)
-    builder.create(child)
-    executable = "Scripts/python.exe" if os.name == "nt" else "bin/python"
-    parent_python, child_python = parent / executable, child / executable
-    result = subprocess.run(
-        [
-            str(parent_python),
-            "-I",
-            "-c",
-            "import sysconfig; print(sysconfig.get_path('purelib'))",
-        ],
-        env=environment,
-        cwd=tmp_path,
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    parent_site = Path(result.stdout.strip())
-    (parent_site / "aiohttp").mkdir()
-    (parent_site / "aiohttp" / "__init__.py").write_text(
-        "from parent_runtime_dependency import VERSION\n__version__ = VERSION\n",
-        encoding="utf-8",
-    )
-    (parent_site / "parent_runtime_dependency.py").write_text(
-        "VERSION = 'parent-only-runtime'\n", encoding="utf-8"
-    )
-    (parent_site / "pystove").mkdir()
-    (parent_site / "pystove" / "__init__.py").write_text(
-        "ORIGIN = 'parent-package-must-not-win'\n", encoding="utf-8"
-    )
-    configuration = wheel_runner.runtime_configuration(
-        parent_python, environment, tmp_path
-    )
-    assert configuration["identity"][0] == "parent-only-runtime"
-    assert Path(configuration["identity"][1]).is_relative_to(parent_site)
-    child_site = wheel_runner.link_parent_site_packages(
-        child_python, configuration, environment, tmp_path
-    )
-    (child_site / "pystove").mkdir()
-    (child_site / "pystove" / "__init__.py").write_text(
-        "ORIGIN = 'child-wheel'\n", encoding="utf-8"
-    )
-    identity = wheel_runner.runtime_identity(child_python, environment, tmp_path)
-    assert identity == configuration["identity"]
-    result = subprocess.run(
-        [
-            str(child_python),
-            "-I",
-            "-c",
-            "import json, pystove; "
-            "print(json.dumps([pystove.ORIGIN, pystove.__file__]))",
-        ],
-        env=environment,
-        cwd=tmp_path,
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    label, origin = json.loads(result.stdout)
-    assert label == "child-wheel"
-    assert Path(origin).is_relative_to(child_site)
-
-
 def metadata_bytes(*, extra="", requirement="aiohttp"):
     return (
         "Metadata-Version: 2.4\n"
-        "Name: pystove\n"
+        "Name: saynwerk-pystove\n"
+        "Maintainer: Saynwerk\n"
+        "Project-URL: Original project, https://github.com/mvn23/pystove\n"
         f"Version: {validator.read_version(ROOT)}\n"
         f"Requires-Dist: {requirement}\n"
         f"{extra}\n"
@@ -145,7 +76,7 @@ def metadata_bytes(*, extra="", requirement="aiohttp"):
 def write_wheel(path, *, metadata=None, mutate=None, corrupt_record=None):
     baseline = validator.load_baseline(ROOT)
     version = validator.read_version(ROOT)
-    prefix = f"pystove-{version}.dist-info"
+    prefix = f"saynwerk_pystove-{version}.dist-info"
     files = {
         name: (ROOT / name).read_bytes()
         for name in baseline["runtime_sha256"]
@@ -184,7 +115,7 @@ def write_sdist(path, *, omit=None, mutate=None, special=None):
         mutate(files)
     with tarfile.open(path, "w:gz") as archive:
         for name, data in files.items():
-            member = tarfile.TarInfo(f"pystove-{version}/{name}")
+            member = tarfile.TarInfo(f"saynwerk_pystove-{version}/{name}")
             member.size = len(data)
             archive.addfile(member, io.BytesIO(data))
         if special:
@@ -194,7 +125,7 @@ def write_sdist(path, *, omit=None, mutate=None, special=None):
 def test_runtime_and_cli_match_all_reviewed_scopes():
     baseline, version = validator.validate_sources(ROOT)
     assert version != baseline["version"]
-    assert ".dev" in version
+    assert version == "0.3.0rc1"
 
 
 def test_historical_baseline_h3_and_h4_hashes_are_preserved():
@@ -380,7 +311,7 @@ runpy.run_path(sys.argv[1], run_name='__main__')
         check=True,
     )
     metadata = json.loads(result.stdout)
-    assert metadata["name"] == "pystove"
+    assert metadata["name"] == "saynwerk-pystove"
     assert metadata["version"] == validator.read_version(ROOT)
     assert metadata["install_requires"] == ["aiohttp"]
     assert "python_requires" not in metadata
@@ -411,7 +342,7 @@ def test_sdist_contains_sources_needed_to_validate_the_wheel(tmp_path):
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 with archive.extractfile(member) as stream:
                     destination.write_bytes(stream.read())
-    source_root = extracted / f"pystove-{validator.read_version(ROOT)}"
+    source_root = extracted / f"saynwerk_pystove-{validator.read_version(ROOT)}"
     validator.validate_sources(source_root)
     validator.validate_wheel(wheel, source_root)
     validator.validate_sdist(sdist, source_root)
@@ -419,7 +350,8 @@ def test_sdist_contains_sources_needed_to_validate_the_wheel(tmp_path):
 
 @pytest.mark.parametrize(
     "requirement",
-    ["aiohttp>=3.10", "aiohttp; python_version >= '3.11'", "aiohttp[speedups]"],
+    ["pystove", "aiohttp>=3.10", "aiohttp; python_version >= '3.11'",
+     "aiohttp[speedups]"],
 )
 def test_wheel_rejects_runtime_dependency_contract_changes(tmp_path, requirement):
     wheel = tmp_path / "pystove.whl"
@@ -529,7 +461,7 @@ def test_sdist_rejects_unsafe_paths_without_extracting(tmp_path, name):
 def test_sdist_rejects_symbolic_links(tmp_path):
     sdist = tmp_path / "pystove.tar.gz"
     version = validator.read_version(ROOT)
-    link = tarfile.TarInfo(f"pystove-{version}/linked-file")
+    link = tarfile.TarInfo(f"saynwerk_pystove-{version}/linked-file")
     link.type = tarfile.SYMTYPE
     link.linkname = "../../outside"
     write_sdist(sdist, special=link)

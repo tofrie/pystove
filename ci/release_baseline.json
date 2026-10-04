@@ -1,0 +1,10 @@
+{
+  "commit": "eec0d60a0120140171a7ef2a5b6c6005da04c51b",
+  "version": "0.3a2.dev0",
+  "runtime_sha256": {
+    "pystove/__init__.py": "d72dcfa678bc6194a5f3aedb7379d2beb3a1392f9696d22cbca16bb1d5358bdf",
+    "pystove/pystove.py": "dbc65d1c2bfe34746107a3e61050a901915f3f4e44f7886c1a9553e1102f5743",
+    "pystove/version.py": "fd8c0550a7977744ef7e691fdb76649bebdc353c680a8d600e47f212b80d5384",
+    "pystove_cli.py": "974234ea3eeb6f7e2a5a2110b4a79a6592df9efd34f6cc9f74dfdb3f52c4da0d"
+  }
+}

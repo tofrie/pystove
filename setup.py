@@ -25,14 +25,16 @@ def read(fname):
 
 
 setup(
-    name="pystove",
+    name="saynwerk-pystove",
     version=read_version(),
+    maintainer="Saynwerk",
     author="Milan van Nugteren",
     author_email="milan@network23.nl",
     description=("A library to interface with HWAM wood burning stoves."),
     license="GPLv3+",
     keywords="stove hwam smartcontrol",
-    url="https://github.com/mvn23/pystove",
+    url="https://github.com/tofrie/pystove",
+    project_urls={"Original project": "https://github.com/mvn23/pystove"},
     packages=["pystove"],
     long_description=read("README.md"),
     long_description_content_type="text/markdown",
@@ -40,7 +42,7 @@ setup(
         "aiohttp",
     ],
     classifiers=[
-        "Development Status :: 3 - Alpha",
+        "Development Status :: 4 - Beta",
         "Topic :: Software Development :: Libraries",
         "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
     ],
