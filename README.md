@@ -13,7 +13,7 @@ ClientPayloadError, ServerDisconnectedError and existing TimeoutError during
 POST command body reading, using the same unconfirmed-success meaning. Request
 setup, context errors, HTTP statuses and timeout settings remain unchanged.
 Other runtime defects remain unchanged. See the exact
-[compatibility contract](docs/BASELINE.md) and [development checks](docs/DEVELOPMENT.md).
+[compatibility contract](https://github.com/tofrie/pystove/blob/15c535da39cc3e0a676e459e23fcd640fca4c1d9/docs/BASELINE.md) and [development checks](https://github.com/tofrie/pystove/blob/15c535da39cc3e0a676e459e23fcd640fca4c1d9/docs/DEVELOPMENT.md).
 
 Maintained by **Saynwerk** at [tofrie/pystove](https://github.com/tofrie/pystove).
 This GPLv3+ fork credits the original author Milan van Nugteren and
@@ -23,7 +23,7 @@ maintained distribution, not an official upstream release.
 The distribution is `saynwerk-pystove`; Python imports remain `from pystove import Stove`.
 It depends on `aiohttp`, not on the original `pystove` distribution.
 **Never install both distributions in one environment:** they own the same files.
-Use a fresh virtual environment and the [release checks](docs/SAYNWERK_RELEASE.md).
+Use a fresh virtual environment and the [release checks](https://github.com/tofrie/pystove/blob/15c535da39cc3e0a676e459e23fcd640fca4c1d9/docs/SAYNWERK_RELEASE.md).
 Pip cannot enforce this exclusion. Production Home Assistant still pins `pystove==0.3a1`;
 changing that integration dependency is a separate, gated migration.
 
