@@ -50,21 +50,22 @@ version are unchanged; no hwam_stove files are involved.
 
 In `tofrie/pystove` → Settings → Environments, create **pypi**:
 
-1. Add at least one trusted required reviewer with repository read access.
-2. Enable **Prevent self-review**. Someone other than the workflow initiator
-   must approve; a sole maintainer cannot self-approve under this policy.
-3. Disable administrator bypass of deployment protection rules. The REST
-   Environment response does not expose this UI setting; the human reviewer
-   must verify it explicitly before approving.
-4. Under selected deployment branches/tags, permit exactly the **branch**
+1. Required reviewers and **Prevent self-review** are optional, not publication
+   prerequisites. This project uses a single-maintainer release process; the
+   explicit manual dispatch and exact confirmation provide release approval.
+2. Disable administrator bypass of deployment protection rules. The REST
+   Environment response does not expose this UI setting; the release maintainer
+   must verify it explicitly before dispatching publication.
+3. Under selected deployment branches/tags, permit exactly the **branch**
    `release/saynwerk-pystove-0.3.0rc1`; no tags, wildcards or additional rules.
-5. Do not create any PyPI API-token secrets.
+4. Do not create any PyPI API-token secrets.
 
-The authorization job fails on a missing environment, absent reviewers,
-self-review enabled, or any other deployment branch policy. It never creates
-an environment as a fallback. Repository administrators can still edit workflow
-or environment policy; protect/review changes to these files and the release
-branch and recheck policy before the human approval.
+The authorization job fails on a missing environment or any other deployment
+branch policy. It never creates an environment as a fallback. Optional reviewer
+rules, if configured in GitHub, still apply there; the workflow does not remove
+or bypass them. Repository administrators can still edit workflow or environment
+policy; review changes to these files and the release branch and recheck policy
+before manual publication.
 
 The current default branch is `master`. GitHub's manual-run UI requires the
 workflow on the default branch. Do not merge the release runtime into master
@@ -102,8 +103,8 @@ Before the first upload, require explicit user authorization naming
 `saynwerk-pystove==0.3.0rc1`, source `ca58cb39c0c5eb800156f1ffb8b43b373a3391c3`,
 both hashes above and the reviewed workflow commit. Only then may a human select
 `mode=publish` and supply the confirmation string. Review the green verification
-job and immutable hashes, then a different authorized reviewer approves the
-pending `pypi` environment deployment. No publish-mode dispatch or environment
+job and immutable hashes before the single maintainer dispatches publication.
+No independent reviewer is required. No publish-mode dispatch or environment
 approval is part of this preparation.
 
 References: [PyPI publishing](https://docs.pypi.org/trusted-publishers/using-a-publisher/),

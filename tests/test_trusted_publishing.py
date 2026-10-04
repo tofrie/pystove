@@ -93,14 +93,17 @@ def branches():
 
 
 @pytest.mark.parametrize("change", [
-    "none", "missing", "no_review", "self_review", "unrestricted", "wildcard", "tag",
+    "none", "missing", "no_rules", "no_review", "self_review",
+    "unrestricted", "wildcard", "tag", "extra_branch", "wrong_name",
 ])
-def test_environment_must_exist_and_require_independent_review(
+def test_environment_requires_exact_branch_but_not_independent_review(
     environment, branches, change
 ):
     env = deepcopy(environment)
     if change == "missing":
         env = {}
+    elif change == "no_rules":
+        env["protection_rules"] = [{"type": "branch_policy"}]
     elif change == "no_review":
         env["protection_rules"][0]["reviewers"] = []
     elif change == "self_review":
@@ -111,7 +114,12 @@ def test_environment_must_exist_and_require_independent_review(
         branches["branch_policies"][0]["name"] = "*"
     elif change == "tag":
         branches["branch_policies"][0]["type"] = "tag"
-    if change == "none":
+    elif change == "extra_branch":
+        branches["total_count"] = 2
+        branches["branch_policies"].append({"name": "master", "type": "branch"})
+    elif change == "wrong_name":
+        env["name"] = "other"
+    if change in {"none", "no_rules", "no_review", "self_review"}:
         release.verify_environment(env, branches)
     else:
         with pytest.raises(ValueError):
@@ -163,3 +171,37 @@ def test_workflow_keeps_oidc_and_upload_out_of_ordinary_events():
         assert f"'{name}': '{digest}'" in publish
     for action in re.findall(r"uses: (.+)", workflow):
         assert re.search(r"@[0-9a-f]{40}(?:\s|$)", action), action
+
+
+@pytest.mark.parametrize("changed,value", [
+    (None, None),
+    ("github.event_name", "push"),
+    ("github.event_name", "pull_request"),
+    ("github.repository", "other/pystove"),
+    ("github.ref", "refs/heads/master"),
+    ("github.ref", "refs/tags/0.3.0rc1"),
+    ("inputs.mode", "verify"),
+    ("inputs.confirmation", ""),
+    ("inputs.confirmation", "publish saynwerk-pystove==0.3.0rc1 "),
+])
+def test_all_three_upload_gates_require_exact_manual_authorization(changed, value):
+    workflow = (ROOT / ".github/workflows/publish-pypi.yml").read_text()
+    gates = re.findall(r"if: >-\n((?:[ ]+.+\n)+?)(?= *[a-z-]+:)", workflow)
+    assert len(gates) == 3  # Artifact transfer, authorization, and publication.
+    values = {
+        "github.event_name": "workflow_dispatch",
+        "github.repository": "tofrie/pystove",
+        "github.ref": f"refs/heads/{release.BRANCH}",
+        "inputs.mode": "publish",
+        "inputs.confirmation": "publish saynwerk-pystove==0.3.0rc1",
+    }
+    if changed is not None:
+        values[changed] = value
+    for gate in gates:
+        terms = gate.strip().split("&&")
+        assert len(terms) == len(values)
+        comparisons = [re.fullmatch(r"([a-z_.]+) == '([^']+)'", term.strip())
+                       for term in terms]
+        assert all(comparisons), "Unexpected gate expression"
+        result = all(values[term[1]] == term[2] for term in comparisons)
+        assert result is (changed is None)
