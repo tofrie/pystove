@@ -72,6 +72,13 @@
       ],
       "unchanged_source_sha256": "ad01830a6a9ea2acd37f9271a131f5f6551becbc1fc66e8afafc637975bb5760",
       "source_sha256": "bc969414a87a4c41187c3718f2d9abf260536aaeeb126f4d04a6669ca8406087"
+    },
+    "INFO_XML_CLOSE": {
+      "base_commit": "22b75dd8a6fcd680d2ced8747671207e62be790f",
+      "path": "pystove/pystove.py",
+      "added_private_method": "Stove._close_info_file",
+      "unchanged_source_sha256": "bc969414a87a4c41187c3718f2d9abf260536aaeeb126f4d04a6669ca8406087",
+      "source_sha256": "dbc65d1c2bfe34746107a3e61050a901915f3f4e44f7886c1a9553e1102f5743"
     }
   }
 }

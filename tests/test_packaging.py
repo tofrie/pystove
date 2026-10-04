@@ -20,6 +20,49 @@ from ci import test_wheel as wheel_runner, validate_package as validator
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_info_file_cleanup_recovers_exact_predecessor():
+    source = (ROOT / "pystove/pystove.py").read_bytes()
+    previous = validator.info_file_previous_source(source)
+    assert hashlib.sha256(previous).hexdigest() == (
+        "bc969414a87a4c41187c3718f2d9abf260536aaeeb126f4d04a6669ca8406087"
+    )
+
+
+@pytest.mark.parametrize("old,new", [
+    (b'"file_name"', b'"filename"'),
+    (b'"info.xml", DATA_MODE: 1', b'"info.xml", DATA_MODE: 0'),
+    (b'async def create(cls, stove_host, loop=None, skip_ident=False)',
+     b'async def create(cls, stove_host, skip_ident=False)'),
+    (b'self.series = xml_root.find("StoveType").text', b'self.series = "changed"'),
+    (b'await self._session.close()', b'await self._session.close(); return 1'),
+])
+def test_info_file_hash_cannot_authorize_unrelated_changes(old, new):
+    source = (ROOT / "pystove/pystove.py").read_bytes()
+    assert old in source
+    changed = source.replace(old, new)
+    baseline = validator.load_baseline()
+    baseline["reviewed_runtime_changes"]["INFO_XML_CLOSE"]["source_sha256"] = (
+        hashlib.sha256(changed).hexdigest()
+    )
+    with pytest.raises(validator.ValidationError):
+        validator.validate_runtime_source("pystove/pystove.py", changed, baseline)
+
+
+@pytest.mark.parametrize("field,value", [
+    ("base_commit", "unreviewed"),
+    ("path", "pystove/__init__.py"),
+    ("added_private_method", "Stove._get"),
+    ("unchanged_source_sha256", "unreviewed"),
+])
+def test_info_file_review_cannot_expand_scope(field, value):
+    baseline = validator.load_baseline()
+    baseline["reviewed_runtime_changes"]["INFO_XML_CLOSE"][field] = value
+    with pytest.raises(validator.ValidationError, match="info.xml cleanup scope"):
+        validator.validate_runtime_source(
+            "pystove/pystove.py", (ROOT / "pystove/pystove.py").read_bytes(), baseline
+        )
+
+
 def test_wheel_environment_keeps_parent_only_runtime_and_child_package_first(tmp_path):
     environment = os.environ.copy()
     environment.pop("PYTHONPATH", None)

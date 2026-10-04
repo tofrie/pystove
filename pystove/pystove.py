@@ -179,6 +179,8 @@ STOVE_START_URL = "/start"
 
 UNKNOWN = "Unknown"
 
+_INFO_FILE_CLOSE_TIMEOUT = 5.0
+
 
 def _post_response_ok(response_text):
     """Return whether a received POST body confirms success, without retrying.
@@ -533,8 +535,11 @@ class Stove:
                 return
             self.stove_ssid = stove_ssid
 
+        info_read_error = None
+
         async def get_version_info():
             """Get stove version info."""
+            nonlocal info_read_error
             data = {DATA_FILENAME: "info.xml", DATA_MODE: 1}
             json_str = await self._post(
                 "http://" + self.stove_host + STOVE_OPEN_FILE_URL, data
@@ -544,9 +549,17 @@ class Stove:
                 return
             success = json.loads(json_str)
             if success[DATA_SUCCESS] == 1:
-                xml_str = await self._post(
-                    "http://" + self.stove_host + STOVE_READ_OPEN_FILE_URL, data
-                )
+                read_error = None
+                try:
+                    xml_str = await self._post(
+                        "http://" + self.stove_host + STOVE_READ_OPEN_FILE_URL, data
+                    )
+                except BaseException as exc:
+                    read_error = exc
+                    info_read_error = exc
+                    raise
+                finally:
+                    await self._close_info_file(read_error)
                 try:
                     xml_root = ET.fromstring(xml_str)
                     self.algo_version = xml_root.find("Name").text
@@ -573,7 +586,16 @@ class Stove:
             await asyncio.wait((group,))
             group.result()
         except BaseException as cause:
-            async def cleanup_tasks(initial_error=cause):
+            # A read failure can be waiting for its close when a later
+            # factory cancellation arrives. Keep the original failure.
+            primary = (
+                info_read_error
+                if isinstance(cause, asyncio.CancelledError)
+                and info_read_error is not None
+                else cause
+            )
+
+            async def cleanup_tasks(initial_error=primary):
                 for task in tasks:
                     if not task.done():
                         task.cancel()
@@ -596,7 +618,55 @@ class Stove:
             await _finish_initialization_cleanup(
                 cleanup_tasks, "Unable to finish identify task cleanup."
             )
+            if primary is not cause:
+                raise primary from primary.__cause__
             raise
+
+    async def _close_info_file(self, read_error):
+        """Attempt one bounded close after confirmed open, without claiming success."""
+        async def close_file():
+            async with asyncio.timeout(_INFO_FILE_CLOSE_TIMEOUT):
+                # Borrow the existing pool/cookies; never change another request's
+                # retry policy or close the factory-owned connector here.
+                async with aiohttp.ClientSession(
+                    connector=self._session.connector,
+                    connector_owner=False,
+                    cookie_jar=self._session.cookie_jar,
+                    headers=self._session.headers,
+                ) as session:
+                    # aiohttp can retry GET internally, including on a fresh
+                    # connection. Restrict this switch to this close-only session.
+                    session._retry_connection = False
+                    async with session.get(
+                        "http://" + self.stove_host + "/close_file",
+                        allow_redirects=False,
+                    ) as response:
+                        await response.read()
+
+        cancellation = None
+        coroutine = close_file()
+        try:
+            try:
+                close_task = asyncio.ensure_future(coroutine)
+            except BaseException:
+                coroutine.close()
+                raise
+            while not close_task.done():
+                try:
+                    await asyncio.wait((close_task,))
+                except asyncio.CancelledError as exc:
+                    if cancellation is None:
+                        cancellation = exc
+            close_task.result()
+        except BaseException:
+            _LOGGER.error(
+                "info.xml close attempt failed; controller close unconfirmed.",
+                exc_info=True,
+            )
+        # Unlike failed-initialization cleanup, this also runs on a successful
+        # read: a first caller cancellation here must remain visible afterwards.
+        if read_error is None and cancellation is not None:
+            raise cancellation
 
     async def _self_test_result(self):
         """Get self test result."""

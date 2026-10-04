@@ -33,6 +33,9 @@ class FakeResponse:
             raise self.text_error
         return self.body
 
+    async def read(self):
+        return (await self.text()).encode()
+
 
 class FakeSession:
     """Record exact calls and use queued responses without opening a socket."""
@@ -42,6 +45,24 @@ class FakeSession:
         self.responses = []
         self.closed = False
         self.close_calls = 0
+        self.connector = object()
+        self.cookie_jar = object()
+        self.headers = {"Accept": "application/json"}
+        self.borrowers = []
+
+    def factory(self, **kwargs):
+        if kwargs.get("connector_owner") is False:
+            assert kwargs == {
+                "connector": self.connector,
+                "connector_owner": False,
+                "cookie_jar": self.cookie_jar,
+                "headers": self.headers,
+            }
+            borrower = BorrowedSession(self)
+            self.borrowers.append(borrower)
+            return borrower
+        assert kwargs == {"headers": {"Accept": "application/json"}}
+        return self
 
     def queue_text(
         self,
@@ -81,6 +102,26 @@ class FakeSession:
     async def close(self):
         self.close_calls += 1
         self.closed = True
+
+
+class BorrowedSession(FakeSession):
+    """A close-only request shares transport but never owns its parent's lifetime."""
+
+    def __init__(self, parent):
+        super().__init__()
+        self.parent = parent
+        self._retry_connection = True
+
+    def _request(self, method, url, kwargs):
+        assert self._retry_connection is False
+        assert not self.parent.closed
+        return self.parent._request(method, url, kwargs)
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        await self.close()
 
 
 @pytest.fixture

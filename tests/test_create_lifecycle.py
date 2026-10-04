@@ -165,7 +165,8 @@ def test_successful_factory_keeps_session_usable_until_destroy(
     session.queue_json(
         {"response": "OK"}, method="GET", url="http://stove.test/start"
     )
-    monkeypatch.setattr(aiohttp, "ClientSession", lambda **kwargs: session)
+    session.queue_text("", method="GET", url="http://stove.test/close_file")
+    monkeypatch.setattr(aiohttp, "ClientSession", session.factory)
 
     async def scenario():
         stove = await Stove.create("stove.test", skip_ident=skip_ident)
@@ -380,7 +381,8 @@ def test_identify_failure_drains_only_its_owned_tasks(
         foreign_session = FakeSession()
         foreign_release = asyncio.Event()
         foreign_task = asyncio.create_task(foreign_release.wait())
-        monkeypatch.setattr(aiohttp, "ClientSession", lambda **kwargs: session)
+        session.queue_text("", method="GET", url="http://stove.test/close_file")
+        monkeypatch.setattr(aiohttp, "ClientSession", session.factory)
         tasks_before = asyncio.all_tasks()
         creator = asyncio.create_task(Stove.create("stove.test"))
         try:

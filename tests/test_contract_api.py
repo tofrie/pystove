@@ -331,11 +331,12 @@ def test_create_identification_preserves_legacy_file_wire_requests(
         "<Info><Name>Algorithm 1.2</Name><StoveType>HWAM 3000</StoveType></Info>",
         url="http://stove.test/read_open_file",
     )
+    session.queue_text("", url="http://stove.test/close_file")
     factory_calls = []
 
     def session_factory(**kwargs):
         factory_calls.append(kwargs)
-        return session
+        return session.factory(**kwargs)
 
     monkeypatch.setattr(legacy.aiohttp, "ClientSession", session_factory)
 
@@ -350,7 +351,15 @@ def test_create_identification_preserves_legacy_file_wire_requests(
         await instance.destroy()
 
     asyncio.run(exercise())
-    assert factory_calls == [{"headers": {"Accept": "application/json"}}]
+    assert factory_calls == [
+        {"headers": {"Accept": "application/json"}},
+        {
+            "connector": session.connector,
+            "connector_owner": False,
+            "cookie_jar": session.cookie_jar,
+            "headers": session.headers,
+        },
+    ]
     assert session.calls == [
         ("GET", "http://stove.test/esp/get_identification", {}),
         ("GET", "http://stove.test/esp/get_current_accesspoint", {}),
@@ -364,6 +373,7 @@ def test_create_identification_preserves_legacy_file_wire_requests(
             "http://stove.test/read_open_file",
             {"data": '{"file_name":"info.xml","mode":1}'},
         ),
+        ("GET", "http://stove.test/close_file", {"allow_redirects": False}),
     ]
     assert session.closed is True
     assert session.responses == []

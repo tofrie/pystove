@@ -12,6 +12,8 @@ The later H6 response-read scope removes only _post_command and restores four
 call targets to recover the exact parser-phase source, including its parser.
 The Python 3.14 approval restores only two wait expressions and their result
 retrieval to recover the exact H6 response-read source, before validating history.
+The info.xml approval removes only its private close helper/timeout and restores
+the exact old read call, recovering the complete Python 3.14 candidate source.
 """
 
 import argparse
@@ -90,6 +92,31 @@ def baseline_source_hash(name, data, baseline):
 def validate_runtime_source(name, data, baseline):
     expected = baseline["runtime_sha256"][name]
     reviewed = baseline.get("reviewed_runtime_changes", {})
+    if "INFO_XML_CLOSE" in reviewed:
+        change = reviewed["INFO_XML_CLOSE"]
+        if (
+            change["base_commit"] != "22b75dd8a6fcd680d2ced8747671207e62be790f"
+            or change["path"] != "pystove/pystove.py"
+            or change["added_private_method"] != "Stove._close_info_file"
+            or change["unchanged_source_sha256"] != (
+                "bc969414a87a4c41187c3718f2d9abf260536aaeeb126f4d04a6669ca8406087"
+            )
+        ):
+            raise ValidationError("Reviewed info.xml cleanup scope changed")
+        previous = dict(baseline)
+        previous["reviewed_runtime_changes"] = {
+            key: value for key, value in reviewed.items() if key != "INFO_XML_CLOSE"
+        }
+        restored = info_file_previous_source(data) if name == change["path"] else data
+        validate_runtime_source(name, restored, previous)
+        if name == change["path"]:
+            if hashlib.sha256(restored).hexdigest() != (
+                change["unchanged_source_sha256"]
+            ):
+                raise ValidationError("Runtime outside info.xml cleanup changed")
+            if hashlib.sha256(data).hexdigest() != change["source_sha256"]:
+                raise ValidationError(f"Frozen runtime changed: {name}")
+        return
     if "PY314_CANCELLATION" in reviewed:
         change = reviewed["PY314_CANCELLATION"]
         if (
@@ -224,6 +251,65 @@ def validate_runtime_source(name, data, baseline):
             expected = change["source_sha256"]
     if baseline_source_hash(name, data, baseline) != expected:
         raise ValidationError(f"Frozen runtime changed: {name}")
+
+
+def info_file_previous_source(data):
+    """Undo only the reviewed close helper, private deadline and read wrapper."""
+    current = b'''                read_error = None
+                try:
+                    xml_str = await self._post(
+                        "http://" + self.stove_host + STOVE_READ_OPEN_FILE_URL, data
+                    )
+                except BaseException as exc:
+                    read_error = exc
+                    info_read_error = exc
+                    raise
+                finally:
+                    await self._close_info_file(read_error)
+'''
+    original = b'''                xml_str = await self._post(
+                    "http://" + self.stove_host + STOVE_READ_OPEN_FILE_URL, data
+                )
+'''
+    timeout = b"_INFO_FILE_CLOSE_TIMEOUT = 5.0\n\n"
+    if data.count(current) != 1 or data.count(timeout) != 1:
+        raise ValidationError("Info.xml read/cleanup boundary changed")
+    data = data.replace(current, original).replace(timeout, b"")
+    for current, original in (
+        (b"        info_read_error = None\n\n", b""),
+        (b"            nonlocal info_read_error\n", b""),
+        (b'''            # A read failure can be waiting for its close when a later
+            # factory cancellation arrives. Keep the original failure.
+            primary = (
+                info_read_error
+                if isinstance(cause, asyncio.CancelledError)
+                and info_read_error is not None
+                else cause
+            )
+
+            async def cleanup_tasks(initial_error=primary):''',
+         b"            async def cleanup_tasks(initial_error=cause):"),
+        (b"            if primary is not cause:\n"
+         b"                raise primary from primary.__cause__\n", b""),
+    ):
+        if data.count(current) != 1:
+            raise ValidationError("Info.xml primary-error boundary changed")
+        data = data.replace(current, original)
+    tree = ast.parse(data.decode())
+    stove = next(node for node in tree.body
+                 if isinstance(node, ast.ClassDef) and node.name == "Stove")
+    helpers = [node for node in stove.body
+               if isinstance(node, ast.AsyncFunctionDef)
+               and node.name == "_close_info_file"]
+    if len(helpers) != 1 or helpers[0].decorator_list:
+        raise ValidationError("Info.xml private close helper changed")
+    lines = data.splitlines(keepends=True)
+    helper = helpers[0]
+    start = sum(map(len, lines[:helper.lineno - 1]))
+    end = sum(map(len, lines[:helper.end_lineno + 1]))
+    if lines[helper.end_lineno] != b"\n":
+        raise ValidationError("Info.xml helper boundary changed")
+    return data[:start] + data[end:]
 
 
 def lifecycle_scope_hash(data):
