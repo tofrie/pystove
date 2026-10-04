@@ -10,6 +10,8 @@ only four POST response expressions and removes its private parser to recover
 the complete, hash-pinned H4 source; all request construction stays frozen.
 The later H6 response-read scope removes only _post_command and restores four
 call targets to recover the exact parser-phase source, including its parser.
+The Python 3.14 approval restores only two wait expressions and their result
+retrieval to recover the exact H6 response-read source, before validating history.
 """
 
 import argparse
@@ -88,6 +90,46 @@ def baseline_source_hash(name, data, baseline):
 def validate_runtime_source(name, data, baseline):
     expected = baseline["runtime_sha256"][name]
     reviewed = baseline.get("reviewed_runtime_changes", {})
+    if "PY314_CANCELLATION" in reviewed:
+        change = reviewed["PY314_CANCELLATION"]
+        if (
+            change["base_commit"] != "fcb7e8ac46b1cc5d73de7c5879e49073aa21769b"
+            or change["path"] != "pystove/pystove.py"
+            or change["wait_sites"] != [
+                "_finish_initialization_cleanup", "Stove._identify"
+            ]
+            or change["unchanged_source_sha256"] != (
+                "ad01830a6a9ea2acd37f9271a131f5f6551becbc1fc66e8afafc637975bb5760"
+            )
+        ):
+            raise ValidationError("Reviewed Python 3.14 lifecycle scope changed")
+        previous = dict(baseline)
+        previous["reviewed_runtime_changes"] = {
+            key: value for key, value in reviewed.items()
+            if key != "PY314_CANCELLATION"
+        }
+        restored = data
+        if name == change["path"]:
+            for current, old in (
+                (b"                await asyncio.wait((cleanup,))",
+                 b"                await asyncio.shield(cleanup)"),
+                (b"            await asyncio.wait((group,))\n"
+                 b"            group.result()",
+                 b"            await asyncio.shield(group)"),
+            ):
+                if restored.count(current) != 1:
+                    raise ValidationError("Python 3.14 wait sites changed")
+                restored = restored.replace(current, old)
+        # Validate every historical approval first, without rewriting its hashes.
+        validate_runtime_source(name, restored, previous)
+        if name == change["path"]:
+            if hashlib.sha256(restored).hexdigest() != (
+                change["unchanged_source_sha256"]
+            ):
+                raise ValidationError("Runtime outside Python 3.14 wait sites changed")
+            if hashlib.sha256(data).hexdigest() != change["source_sha256"]:
+                raise ValidationError(f"Frozen runtime changed: {name}")
+        return
     if reviewed:
         if set(reviewed) not in (
             {"H3"}, {"H3", "H4"}, {"H3", "H4", "H6"},

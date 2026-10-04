@@ -62,6 +62,16 @@
       "added_private_method": "Stove._post_command",
       "unchanged_source_sha256": "0e01238ef052cdb501674f73e4bac79db22dd6d26c32cfa9f2e74747b435d782",
       "source_sha256": "ad01830a6a9ea2acd37f9271a131f5f6551becbc1fc66e8afafc637975bb5760"
+    },
+    "PY314_CANCELLATION": {
+      "base_commit": "fcb7e8ac46b1cc5d73de7c5879e49073aa21769b",
+      "path": "pystove/pystove.py",
+      "wait_sites": [
+        "_finish_initialization_cleanup",
+        "Stove._identify"
+      ],
+      "unchanged_source_sha256": "ad01830a6a9ea2acd37f9271a131f5f6551becbc1fc66e8afafc637975bb5760",
+      "source_sha256": "bc969414a87a4c41187c3718f2d9abf260536aaeeb126f4d04a6669ca8406087"
     }
   }
 }

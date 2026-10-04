@@ -205,7 +205,7 @@ async def _finish_initialization_cleanup(operation, message):
             raise
         while not cleanup.done():
             try:
-                await asyncio.shield(cleanup)
+                await asyncio.wait((cleanup,))
             except asyncio.CancelledError:
                 # Further caller cancellation must not interrupt owned cleanup.
                 continue
@@ -570,7 +570,8 @@ class Stove:
                     raise
                 tasks.append(task)
             group = asyncio.gather(*tasks)
-            await asyncio.shield(group)
+            await asyncio.wait((group,))
+            group.result()
         except BaseException as cause:
             async def cleanup_tasks(initial_error=cause):
                 for task in tasks:

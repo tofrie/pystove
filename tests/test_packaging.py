@@ -653,3 +653,38 @@ def test_response_read_review_cannot_be_expanded(field, value):
         validator.validate_runtime_source(
             "pystove/pystove.py", (ROOT / "pystove/pystove.py").read_bytes(), baseline
         )
+
+
+@pytest.mark.parametrize("field,value", [
+    ("base_commit", "unreviewed"),
+    ("path", "pystove/__init__.py"),
+    ("wait_sites", ["Stove.get_data"]),
+    ("unchanged_source_sha256", "unreviewed"),
+])
+def test_py314_review_cannot_expand_scope(field, value):
+    baseline = validator.load_baseline(ROOT)
+    baseline["reviewed_runtime_changes"]["PY314_CANCELLATION"][field] = value
+    with pytest.raises(validator.ValidationError, match="Python 3.14 lifecycle scope"):
+        validator.validate_runtime_source(
+            "pystove/pystove.py", (ROOT / "pystove/pystove.py").read_bytes(), baseline
+        )
+
+
+@pytest.mark.parametrize("old,new", [
+    (b"await asyncio.wait((cleanup,))", b"await cleanup"),
+    (b"await asyncio.wait((group,))", b"await group"),
+    (b"            group.result()", b"            pass"),
+    (b"        cleanup.result()", b"        pass"),
+    (b"    async def get_data(self):", b"    async def get_data(self, other=None):"),
+    (b'"Accept": "application/json"', b'"Accept": "changed"'),
+])
+def test_py314_hash_cannot_authorize_other_runtime_changes(old, new):
+    baseline = validator.load_baseline(ROOT)
+    source = (ROOT / "pystove/pystove.py").read_bytes()
+    assert source.count(old) == 1
+    changed = source.replace(old, new)
+    baseline["reviewed_runtime_changes"]["PY314_CANCELLATION"]["source_sha256"] = (
+        hashlib.sha256(changed).hexdigest()
+    )
+    with pytest.raises(validator.ValidationError):
+        validator.validate_runtime_source("pystove/pystove.py", changed, baseline)
