@@ -92,6 +92,24 @@ def baseline_source_hash(name, data, baseline):
 def validate_runtime_source(name, data, baseline):
     expected = baseline["runtime_sha256"][name]
     reviewed = baseline.get("reviewed_runtime_changes", {})
+    if "CACHED_DIAGNOSTICS" in reviewed:
+        change = reviewed["CACHED_DIAGNOSTICS"]
+        if change["base_commit"] != "289c5492c7afc9331324195afb36b0c7e4cd7159":
+            raise ValidationError("Cached diagnostics baseline changed")
+        previous = dict(baseline)
+        previous["reviewed_runtime_changes"] = {
+            key: value for key, value in reviewed.items()
+            if key != "CACHED_DIAGNOSTICS"
+        }
+        restored = cached_diagnostics_previous_source(data) if name == (
+            "pystove/pystove.py"
+        ) else data
+        validate_runtime_source(name, restored, previous)
+        if name == "pystove/pystove.py" and hashlib.sha256(data).hexdigest() != (
+            change["source_sha256"]
+        ):
+            raise ValidationError("Frozen cached diagnostics source changed")
+        return
     if "INFO_XML_CLOSE" in reviewed:
         change = reviewed["INFO_XML_CLOSE"]
         if (
@@ -251,6 +269,29 @@ def validate_runtime_source(name, data, baseline):
             expected = change["source_sha256"]
     if baseline_source_hash(name, data, baseline) != expected:
         raise ValidationError(f"Frozen runtime changed: {name}")
+
+
+def cached_diagnostics_previous_source(data):
+    """Remove only the two additive cache accessors and one post-parse call.
+
+    The restored bytes must still satisfy EVERY historical runtime/protocol hash.
+    """
+    tree = ast.parse(data)
+    stove, = (n for n in tree.body if isinstance(n, ast.ClassDef)
+              and n.name == "Stove")
+    methods = {n.name: n for n in stove.body
+               if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef)}
+    first, last = (methods[n] for n in ("cached_diagnostics", "_cache_diagnostics"))
+    lines = data.splitlines(keepends=True)
+    start = first.decorator_list[0].lineno - 1
+    end = methods["get_data"].lineno - 1
+    if last.end_lineno > end or first.decorator_list[0].id != "property":
+        raise ValidationError("Unexpected cached diagnostics structure")
+    restored = b"".join(lines[:start] + lines[end:])
+    call = b"        self._cache_diagnostics(data)\n"
+    if restored.count(call) != 1:
+        raise ValidationError("Expected exactly one post-parse cache update")
+    return restored.replace(call, b"")
 
 
 def info_file_previous_source(data):
@@ -519,13 +560,16 @@ def validate_sources(repo_root=ROOT):
     for name in baseline["runtime_sha256"]:
         validate_runtime_source(name, (repo_root / name).read_bytes(), baseline)
     version = read_version(repo_root)
-    if version != "0.3.0rc1":
-        raise ValidationError("Release artifacts require version 0.3.0rc1")
+    if version != "0.3.0rc2":
+        raise ValidationError("Release artifacts require version 0.3.0rc2")
     release = json.loads((repo_root / "ci/release_baseline.json").read_text())
     if release["commit"] != "eec0d60a0120140171a7ef2a5b6c6005da04c51b":
         raise ValidationError("Unexpected release runtime baseline")
     for name, expected in release["runtime_sha256"].items():
-        digest = baseline_source_hash(name, (repo_root / name).read_bytes(), release)
+        data = (repo_root / name).read_bytes()
+        if name == "pystove/pystove.py":
+            data = cached_diagnostics_previous_source(data)
+        digest = baseline_source_hash(name, data, release)
         if digest != expected:
             raise ValidationError(f"Runtime differs from eec0d60: {name}")
     return baseline, version

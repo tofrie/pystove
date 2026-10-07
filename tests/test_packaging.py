@@ -20,7 +20,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_info_file_cleanup_recovers_exact_predecessor():
     source = (ROOT / "pystove/pystove.py").read_bytes()
-    previous = validator.info_file_previous_source(source)
+    previous = validator.info_file_previous_source(
+        validator.cached_diagnostics_previous_source(source)
+    )
     assert hashlib.sha256(previous).hexdigest() == (
         "bc969414a87a4c41187c3718f2d9abf260536aaeeb126f4d04a6669ca8406087"
     )
@@ -125,7 +127,7 @@ def write_sdist(path, *, omit=None, mutate=None, special=None):
 def test_runtime_and_cli_match_all_reviewed_scopes():
     baseline, version = validator.validate_sources(ROOT)
     assert version != baseline["version"]
-    assert version == "0.3.0rc1"
+    assert version == "0.3.0rc2"
 
 
 def test_historical_baseline_h3_and_h4_hashes_are_preserved():
@@ -663,3 +665,26 @@ def test_py314_hash_cannot_authorize_other_runtime_changes(old, new):
     )
     with pytest.raises(validator.ValidationError):
         validator.validate_runtime_source("pystove/pystove.py", changed, baseline)
+
+
+def test_cache_extension_restores_byte_exact_rc1_runtime():
+    source = (ROOT / "pystove/pystove.py").read_bytes()
+    previous = validator.cached_diagnostics_previous_source(source)
+    assert hashlib.sha256(previous).hexdigest() == (
+        "dbc65d1c2bfe34746107a3e61050a901915f3f4e44f7886c1a9553e1102f5743"
+    )
+
+
+@pytest.mark.parametrize("old,new", [
+    (b'STOVE_DATA_URL = "/get_stove_data"', b'STOVE_DATA_URL = "/changed"'),
+    (b'async def get_data(self):', b'async def get_data(self, optional=True):'),
+    (b'DATA_BURN_LEVEL: data[DATA_BURN_LEVEL],', b'DATA_BURN_LEVEL: 0,'),
+])
+def test_cache_hash_cannot_authorize_protocol_or_contract_change(old, new):
+    source = (ROOT / "pystove/pystove.py").read_bytes().replace(old, new)
+    baseline = validator.load_baseline()
+    baseline["reviewed_runtime_changes"]["CACHED_DIAGNOSTICS"]["source_sha256"] = (
+        hashlib.sha256(source).hexdigest()
+    )
+    with pytest.raises(validator.ValidationError):
+        validator.validate_runtime_source("pystove/pystove.py", source, baseline)

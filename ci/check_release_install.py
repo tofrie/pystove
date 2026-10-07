@@ -15,7 +15,7 @@ import sysconfig
 import zipfile
 
 NAME = "saynwerk-pystove"
-VERSION = "0.3.0rc1"
+VERSION = "0.3.0rc2"
 
 
 def normalized(name):
@@ -37,7 +37,7 @@ def check_distributions(*, empty=False):
             raise ValueError("Release environment already contains pystove code")
         return None
     if len(found) != 1 or found[0].version != VERSION:
-        raise ValueError("Expected exactly one saynwerk-pystove==0.3.0rc1 distribution")
+        raise ValueError("Expected exactly one saynwerk-pystove==0.3.0rc2 distribution")
     return found[0]
 
 

@@ -249,6 +249,32 @@ class Stove:
     async def destroy(self):
         await self._session.close()
 
+    @property
+    def cached_diagnostics(self):
+        """Copy optional diagnostics from the last successful get_data, without I/O.
+
+        Empty before the first valid status. Failed/cancelled reads retain the
+        last successful snapshot; a newer valid status replaces it completely.
+        This cache does not establish freshness or change the 25-key result.
+        """
+        return getattr(self, "_cached_diagnostics", {}).copy()
+
+    def _cache_diagnostics(self, data):
+        """Accept only the two optional diagnostic values, never raw objects."""
+        from contextlib import suppress
+
+        diagnostics = {}
+        beeps = data.get("remote_refill_beeps")
+        if type(beeps) is int and beeps >= 0:
+            diagnostics["remote_refill_beeps"] = beeps
+        parts = tuple(data.get(f"wifi_version_{part}")
+                      for part in ("major", "minor", "build"))
+        if all(type(part) is int and part >= 0 for part in parts):
+            # Python's integer-to-string limit must not reject valid status.
+            with suppress(ValueError):
+                diagnostics["wifi_version"] = ".".join(map(str, parts))
+        self._cached_diagnostics = diagnostics
+
     async def get_data(self):
         """Call get_raw_data, process result before returning."""
         from collections.abc import MutableMapping
@@ -369,6 +395,7 @@ class Stove:
             DATA_VALVE3_POSITION: data[DATA_VALVE3_POSITION],
             DATA_FIRMWARE_VERSION: stove_version,
         }
+        self._cache_diagnostics(data)
         return processed_data
 
     async def get_live_data(self):

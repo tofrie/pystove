@@ -79,6 +79,10 @@
       "added_private_method": "Stove._close_info_file",
       "unchanged_source_sha256": "bc969414a87a4c41187c3718f2d9abf260536aaeeb126f4d04a6669ca8406087",
       "source_sha256": "dbc65d1c2bfe34746107a3e61050a901915f3f4e44f7886c1a9553e1102f5743"
+    },
+    "CACHED_DIAGNOSTICS": {
+      "base_commit": "289c5492c7afc9331324195afb36b0c7e4cd7159",
+      "source_sha256": "a25290d66f9936f7827a68beb15232ca4778b52de7b642008791ac329208bc02"
     }
   }
 }

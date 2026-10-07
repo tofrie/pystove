@@ -2,7 +2,7 @@
 
 An async python library with command line interface to interact with HWAM SmartControl wood burning stoves.
 
-The release candidate `0.3.0rc1` preserves the published `0.3a1` successful API
+The release candidate `0.3.0rc2` preserves the published `0.3a1` successful API
 and HWAM request contract. Audit H3 now cleans up owned sessions and tasks after
 failed or cancelled initialization. H4 makes invalid or incomplete status data
 return `None`; successful data retains the exact baseline values and types.
@@ -24,8 +24,19 @@ The distribution is `saynwerk-pystove`; Python imports remain `from pystove impo
 It depends on `aiohttp`, not on the original `pystove` distribution.
 **Never install both distributions in one environment:** they own the same files.
 Use a fresh virtual environment and the [release checks](https://github.com/tofrie/pystove/blob/15c535da39cc3e0a676e459e23fcd640fca4c1d9/docs/SAYNWERK_RELEASE.md).
-Pip cannot enforce this exclusion. Production Home Assistant still pins `pystove==0.3a1`;
-changing that integration dependency is a separate, gated migration.
+Pip cannot enforce this exclusion. Integrations must validate each dependency
+upgrade in an isolated environment before changing their production pin.
+
+### Cached diagnostics
+
+`stove.cached_diagnostics` returns a new dictionary without I/O, containing only
+optional `wifi_version` and `remote_refill_beeps` from the last successful status
+read. It is empty initially. Successful reads replace the cache, clearing absent
+or malformed optional values; failed reads retain the last successful snapshot.
+This is not a freshness guarantee. `get_data()` still returns exactly its original
+25 keys, and performs the same single status request. No door/service-date
+contract or new entities are introduced. Version 0.3.0rc2 is prepared for separate
+publication approval.
 
 ### Contents
 - [Usage Example](#usage-example)

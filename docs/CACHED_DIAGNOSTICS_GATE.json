@@ -1,0 +1,81 @@
+{
+  "base": "289c5492c7afc9331324195afb36b0c7e4cd7159",
+  "version": "0.3.0rc2",
+  "artifacts": {
+    "saynwerk_pystove-0.3.0rc2-py3-none-any.whl": "1aa40ab8a5a53e31f999b0dd98c2742a37890269196b3fcb38faef81a9c09028",
+    "saynwerk_pystove-0.3.0rc2.tar.gz": "8ed8600f302d2d18c4e8c48ade93612752ba53f65a46472a467e5ab8452886be"
+  },
+  "matrix": {
+    "3.11": {
+      "passed": 1216,
+      "xfailed": 6,
+      "xpass": 0,
+      "steps": {
+        "pytest": 0,
+        "xfails": 0,
+        "ruff": 0,
+        "build": 0,
+        "validate": 0,
+        "isolated": 0,
+        "wheel": 0
+      },
+      "installed_wheel_passed": 1057,
+      "installed_wheel_xfailed": 6
+    },
+    "3.12": {
+      "passed": 1216,
+      "xfailed": 6,
+      "xpass": 0,
+      "steps": {
+        "pytest": 0,
+        "xfails": 0,
+        "ruff": 0,
+        "build": 0,
+        "validate": 0,
+        "isolated": 0,
+        "wheel": 0
+      },
+      "installed_wheel_passed": 1057,
+      "installed_wheel_xfailed": 6
+    },
+    "3.13": {
+      "passed": 1216,
+      "xfailed": 6,
+      "xpass": 0,
+      "steps": {
+        "pytest": 0,
+        "xfails": 0,
+        "ruff": 0,
+        "build": 0,
+        "validate": 0,
+        "isolated": 0,
+        "wheel": 0
+      },
+      "installed_wheel_passed": 1057,
+      "installed_wheel_xfailed": 6
+    },
+    "3.14": {
+      "passed": 1216,
+      "xfailed": 6,
+      "xpass": 0,
+      "steps": {
+        "pytest": 0,
+        "xfails": 0,
+        "ruff": 0,
+        "build": 0,
+        "validate": 0,
+        "isolated": 0,
+        "wheel": 0
+      },
+      "installed_wheel_passed": 1057,
+      "installed_wheel_xfailed": 6
+    }
+  },
+  "runtime_scope": "additive cache methods and one successful-status assignment; version literal",
+  "requests_changed": 0,
+  "get_data_keys": 25,
+  "hardware_access": false,
+  "published": false,
+  "build_epoch": 1791058066,
+  "sdist_normalization": "ci.pypi_release.normalize_sdist; member bytes unchanged"
+}

@@ -262,8 +262,10 @@ def test_exact_public_stove_methods_and_signatures():
     assert {
         name: str(inspect.signature(getattr(Stove, name)))
         for name in Stove.__dict__
-        if not name.startswith("_")
+        if not name.startswith("_") and name != "cached_diagnostics"
     } == expected
+    assert isinstance(Stove.cached_diagnostics, property)
+    assert Stove.cached_diagnostics.fset is None
     for name in expected:
         is_coroutine = inspect.iscoroutinefunction(getattr(Stove, name))
         assert is_coroutine is (name != "self_test")

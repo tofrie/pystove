@@ -99,7 +99,7 @@ def test_installed_artifact_must_match_wheel(tmp_path, monkeypatch, mutation):
 ])
 def test_release_metadata_rejects_wrong_identity(field, value):
     values = {
-        "Name": "saynwerk-pystove", "Version": "0.3.0rc1",
+        "Name": "saynwerk-pystove", "Version": "0.3.0rc2",
         "Maintainer": "Saynwerk", "Requires-Dist": "aiohttp",
         "Project-URL": "Original project, https://github.com/mvn23/pystove",
     }

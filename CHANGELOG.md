@@ -1,3 +1,11 @@
+## 0.3.0rc2 (prepared, not published)
+
+- Add a copied, read-only `Stove.cached_diagnostics` snapshot for optional Wi-Fi
+  firmware version and remote refill beep count from the existing status read.
+- Preserve the exact 25-key `get_data()` result and all requests. Missing or
+  malformed optional values clear on the next valid status; failed reads retain
+  the last successful cache. No door/service-date contract is added.
+
 # pystove Changelog
 
 ### 0.3.0rc1 (prepared, not published)
