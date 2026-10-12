@@ -25,6 +25,7 @@ CONTRACT_TESTS = (
     "test_info_file_cleanup.py",
     "test_status_validation.py",
     "test_cached_diagnostics.py",
+    "test_cached_status.py",
     "test_post_response_validation.py",
     "test_post_response_transport.py",
     "test_known_failures.py",

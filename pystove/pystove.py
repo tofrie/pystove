@@ -247,6 +247,7 @@ class Stove:
         return self
 
     async def destroy(self):
+        self._invalidate_status()
         await self._session.close()
 
     @property
@@ -275,10 +276,42 @@ class Stove:
                 diagnostics["wifi_version"] = ".".join(map(str, parts))
         self._cached_diagnostics = diagnostics
 
+    @property
+    def cached_status(self):
+        """Copy status from the latest read generation, without I/O.
+
+        valid means the latest attempted status read completed parsing. Missing
+        or non-boolean door data is None even on a valid response. Starting a
+        read, any failed/cancelled read, or destroy makes door state unavailable.
+        Generation is a per-client monotonic invalidation token, not a timestamp
+        or a request count. Older overlapping reads cannot revive this snapshot.
+        Existing cached_diagnostics keeps its last-success semantics separately.
+        """
+        return getattr(self, "_cached_status", {
+            "generation": 0, "valid": False, "door_open": None,
+        }).copy()
+
+    def _invalidate_status(self):
+        generation = self.cached_status["generation"] + 1
+        self._cached_status = {
+            "generation": generation, "valid": False, "door_open": None,
+        }
+        return generation
+
+    def _cache_status(self, data, generation):
+        if self.cached_status["generation"] != generation:
+            return
+        door = data.get("door_open")
+        self._cached_status = {
+            "generation": generation, "valid": True,
+            "door_open": door if type(door) is bool else None,
+        }
+
     async def get_data(self):
         """Call get_raw_data, process result before returning."""
         from collections.abc import MutableMapping
 
+        generation = self._invalidate_status()
         data = await self.get_raw_data()
         if not isinstance(data, MutableMapping):
             _LOGGER.warning("Invalid stove status: expected a mutable mapping.")
@@ -396,6 +429,7 @@ class Stove:
             DATA_FIRMWARE_VERSION: stove_version,
         }
         self._cache_diagnostics(data)
+        self._cache_status(data, generation)
         return processed_data
 
     async def get_live_data(self):

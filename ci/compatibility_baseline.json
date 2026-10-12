@@ -83,6 +83,11 @@
     "CACHED_DIAGNOSTICS": {
       "base_commit": "289c5492c7afc9331324195afb36b0c7e4cd7159",
       "source_sha256": "a25290d66f9936f7827a68beb15232ca4778b52de7b642008791ac329208bc02"
+    },
+    "CACHED_STATUS": {
+      "base_commit": "0ddf5fa413969ff9037b54575a1be46bb91ece04",
+      "base_sha256": "a25290d66f9936f7827a68beb15232ca4778b52de7b642008791ac329208bc02",
+      "source_sha256": "1b8272ec19b62827a2cbf817ddd388b667492c2e17249bd073d1ffaf678360a9"
     }
   }
 }
