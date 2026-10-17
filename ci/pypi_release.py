@@ -1,4 +1,4 @@
-"""First-RC preparation only: reproduce approved bytes and fail closed; no upload."""
+"""RC3 verification only: reproduce approved bytes and fail closed; no upload."""
 
 import argparse
 import copy
@@ -8,18 +8,21 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tarfile
 
-SOURCE = "ca58cb39c0c5eb800156f1ffb8b43b373a3391c3"
-BRANCH = "release/saynwerk-pystove-0.3.0rc1"
+SOURCE = "9aebfd71a5d58cb00c4b29baf3b308310d9947d3"
+BRANCH = "release/saynwerk-pystove-0.3.0rc3"
+REPOSITORY = "tofrie/pystove"
+ARTIFACT = "approved-saynwerk-pystove-0.3.0rc3"
 EPOCH = 1791058066
 APPROVED = {
-    "saynwerk_pystove-0.3.0rc1-py3-none-any.whl":
-        "6017d0b14dfc904cbda82f899b99d2f45c9bf705361355a368a9526a6aad3044",
-    "saynwerk_pystove-0.3.0rc1.tar.gz":
-        "fcaec778ba9c0beadcf9dfea69d92bde178b583c9b6423bd05b914838f3764cc",
+    "saynwerk_pystove-0.3.0rc3-py3-none-any.whl":
+        "03dc8a11e0db7a8c2e3acff4a03ae6c0a41030dd8247c690755387a6eaadc85a",
+    "saynwerk_pystove-0.3.0rc3.tar.gz":
+        "a49548c8c7f11c27cc30679740eda0d4dba06928f474675c570ab9043d420869",
 }
 
 
@@ -85,7 +88,7 @@ def reproduce(source, destination):
         [sys.executable, "-m", "build", "--outdir", str(destination)],
         cwd=source, env=env, check=True,
     )
-    normalize_sdist(destination / "saynwerk_pystove-0.3.0rc1.tar.gz")
+    normalize_sdist(destination / "saynwerk_pystove-0.3.0rc3.tar.gz")
     verify_artifacts(destination)
     subprocess.run(
         [sys.executable, "ci/validate_package.py", "--dist-dir", str(destination)],
@@ -112,6 +115,69 @@ def verify_environment(config, branches):
     # Disabling admin bypass must additionally be checked by the release maintainer.
 
 
+def verify_run(run_id, head, run, jobs, artifacts):
+    """Bind approved files to a successful manual VERIFY of this exact workflow."""
+    expected = {
+        "id": run_id, "event": "workflow_dispatch", "run_attempt": 1,
+        "path": ".github/workflows/publish-pypi.yml", "head_branch": BRANCH,
+        "head_sha": head, "status": "completed", "conclusion": "success",
+    }
+    if any(run.get(key) != value for key, value in expected.items()) or any(
+        run.get(key, {}).get("full_name") != REPOSITORY
+        for key in ("repository", "head_repository")
+    ):
+        raise ValueError(
+            "Require a successful first-attempt VERIFY of this workflow commit"
+        )
+    expected_jobs = {"verify": "success", "authorize": "skipped", "publish": "skipped"}
+    rows = jobs.get("jobs", [])
+    if (
+        jobs.get("total_count") != 3 or len(rows) != 3
+        or {j.get("name"): j.get("conclusion") for j in rows} != expected_jobs
+        or any(j.get("status") != "completed" for j in rows)
+    ):
+        raise ValueError(
+            "Source run must have skipped both authorization and publication"
+        )
+    rows = artifacts.get("artifacts", [])
+    if artifacts.get("total_count") != 1 or len(rows) != 1:
+        raise ValueError("Require exactly one approved VERIFY artifact")
+    artifact = rows[0]
+    if (
+        artifact.get("name") != ARTIFACT or artifact.get("expired") is not False
+        or type(artifact.get("id")) is not int or artifact["id"] <= 0
+        or type(artifact.get("size_in_bytes")) is not int
+        or artifact["size_in_bytes"] <= 0
+        or any(artifact.get("workflow_run", {}).get(key) != value for key, value in {
+            "id": run_id, "head_sha": head, "head_branch": BRANCH,
+        }.items())
+    ):
+        raise ValueError("Invalid, expired or incorrectly attributed VERIFY artifact")
+    return artifact["id"]
+
+
+def resolve_verified_run(run_id, head, output):
+    """Read GitHub metadata only; never select latest, rebuild, or publish."""
+    if (
+        not re.fullmatch(r"[1-9][0-9]*", run_id)
+        or not re.fullmatch(r"[0-9a-f]{40}", head)
+    ):
+        raise ValueError(
+            "Require an explicit numeric VERIFY run ID and exact workflow SHA"
+        )
+    base = f"repos/{REPOSITORY}/actions/runs/{run_id}"
+
+    def read(path):
+        return json.loads(subprocess.check_output(["gh", "api", path], text=True))
+
+    artifact_id = verify_run(
+        int(run_id), head, read(base), read(base + "/attempts/1/jobs?per_page=100"),
+        read(base + "/artifacts?per_page=100"),
+    )
+    with Path(output).open("a") as stream:
+        stream.write(f"run_id={int(run_id)}\nartifact_id={artifact_id}\n")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -123,12 +189,19 @@ def main():
     environment = commands.add_parser("environment")
     environment.add_argument("--config", type=Path, required=True)
     environment.add_argument("--branches", type=Path, required=True)
+    verified_run = commands.add_parser("verified-run")
+    verified_run.add_argument("--run-id", required=True)
+    verified_run.add_argument("--head", required=True)
+    verified_run.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     if args.command == "build":
         reproduce(args.source, args.dist_dir)
         print(json.dumps(APPROVED, indent=2))
     elif args.command == "verify":
         print(json.dumps(verify_artifacts(args.dist_dir), indent=2))
+    elif args.command == "verified-run":
+        resolve_verified_run(args.run_id, args.head, args.output)
+        print("Successful VERIFY run and artifact provenance verified")
     else:
         verify_environment(json.loads(args.config.read_text()),
                            json.loads(args.branches.read_text()))

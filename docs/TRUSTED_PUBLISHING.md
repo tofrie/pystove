@@ -1,113 +1,99 @@
-# First PyPI RC: manual Trusted Publishing preparation
+# RC3: manual Trusted Publishing preparation
 
 Workflow: `.github/workflows/publish-pypi.yml`.
-Project: `saynwerk-pystove==0.3.0rc1`; import namespace: `pystove`.
-This preparation does not create a PyPI project/publisher, configure accounts,
-upload distributions, create a GitHub environment, or publish a tag/release.
+Project: `saynwerk-pystove==0.3.0rc3`; import namespace: `pystove`.
+Publishing branch: `release/saynwerk-pystove-0.3.0rc3`.
+This preparation does not upload distributions, modify PyPI/GitHub account or
+Environment settings, or create a tag/release.
 
 ## Immutable release input
 
-The workflow checks out **ca58cb39c0c5eb800156f1ffb8b43b373a3391c3** into a
-separate source directory. It never packages workflow HEAD or the new CI/docs.
-Python 3.14.6 and the approved source's pinned build tools are used. The sdist
-container uses the same timestamp/order/owner/mode normalization as the approved
-artifact (SOURCE_DATE_EPOCH=1791058066); member contents cannot change.
-
-Both exact hashes must match before any artifact transfer or publication:
+Only source **9aebfd71a5d58cb00c4b29baf3b308310d9947d3** is packaged.
+Workflow HEAD contains only publishing controls/tests/docs and is never packaged.
+Python 3.14.6 and the approved source's pinned build tools reproduce the files
+in VERIFY mode. Sdist timestamp/order/owner/mode normalization matches the
+approved artifact (SOURCE_DATE_EPOCH=1791058066), preserving every member payload.
 
 | File | SHA256 |
 | --- | --- |
-| `saynwerk_pystove-0.3.0rc1-py3-none-any.whl` | `6017d0b14dfc904cbda82f899b99d2f45c9bf705361355a368a9526a6aad3044` |
-| `saynwerk_pystove-0.3.0rc1.tar.gz` | `fcaec778ba9c0beadcf9dfea69d92bde178b583c9b6423bd05b914838f3764cc` |
+| `saynwerk_pystove-0.3.0rc3-py3-none-any.whl` | `03dc8a11e0db7a8c2e3acff4a03ae6c0a41030dd8247c690755387a6eaadc85a` |
+| `saynwerk_pystove-0.3.0rc3.tar.gz` | `a49548c8c7f11c27cc30679740eda0d4dba06928f474675c570ab9043d420869` |
 
-Any mismatch aborts: do not change the approved hashes to accommodate a build.
-The approved runtime suite, exact six xfails, installed-wheel contracts, archive
-validation, Ruff and strict Twine checks must pass. Runtime, dependencies and
-version are unchanged; no hwam_stove files are involved.
+Any mismatch aborts; never change the approved hashes to accommodate a build.
+VERIFY checks source, archive metadata/version/import ownership, the approved
+source suite with exactly six xfails, installed-wheel contracts, Ruff and strict
+Twine. Runtime, dependencies and version remain unchanged; hwam_stove is untouched.
 
-## Permissions and event gates
+## Verify once, publish those exact files without rebuilding
 
-- Pushes/PRs affecting this workflow run **verification only**. Manual dispatch
-  also defaults to `mode=verify`, without OIDC, environment/deployment creation,
-  GitHub artifact upload or any package-index upload.
-- Publication requires `workflow_dispatch`, repository `tofrie/pystove`, branch
-  `release/saynwerk-pystove-0.3.0rc1`, `mode=publish`, and the exact confirmation
-  `publish saynwerk-pystove==0.3.0rc1`.
-- Verification has only `contents: read`. The separate authorization job also
-  has `actions: read` to inspect existing environment policy. Its built-in
-  GitHub token is used only for GitHub reads, never for PyPI authentication.
-- The publish job alone has `id-token: write` and environment `pypi`. It runs
-  on a fresh runner with no source checkout, package installation or builds.
-  It downloads this run's verified artifact (no caller-controlled run/URL),
-  rejects missing/extra/symlink files, independently rechecks both hardcoded
-  SHA256 values, then uses the SHA-pinned official PyPA publishing action.
-- No API token, repository secret, release event, tag trigger, `workflow_run`,
-  `pull_request_target`, TestPyPI step or `skip-existing` behavior is used.
-  A fixed concurrency group prevents concurrent upload jobs. PyPI attestations
-  remain enabled. Partial upload/failure requires manual inspection, not retry.
+1. Push/PR events only run verification. Manual dispatch defaults to `mode=verify`.
+   Neither can authorize PyPI upload. A manual VERIFY on the exact publishing
+   branch additionally stores the two approved files in the Actions artifact
+   `approved-saynwerk-pystove-0.3.0rc3` (seven-day retention). This is not a GitHub
+   Release or package-index upload. Both `authorize` and `publish` remain skipped.
+2. A later, separately authorized dispatch must select `mode=publish`, enter
+   `publish saynwerk-pystove==0.3.0rc3` exactly, and provide `verified_run_id`.
+   **No build, release-source checkout, package installation or Twine invocation runs in
+   publish mode.** It reuses files that already passed VERIFY and strict Twine.
+3. The helper accepts only a completed, successful, first-attempt manual VERIFY
+   in `tofrie/pystove`, on the exact release branch and the **same workflow commit**.
+   It checks the workflow path, all three job results (verify success; authorize
+   and publish skipped), and exactly one unexpired artifact attributed to that
+   run/commit/branch. Arbitrary URLs, artifact names and latest-run selection are
+   not accepted. Re-runs require a fresh manual VERIFY instead.
+4. The files are downloaded by validated artifact/run IDs and both hashes are
+   rechecked. Only these files are transferred to the current run's isolated
+   publish job, which independently checks exact filenames, regular-file types
+   and both hardcoded SHA256 values before upload. Missing/expired artifacts or
+   any mismatch stop the run; publication never falls back to a rebuild.
 
-## Manual GitHub setup (not performed by the agent)
+## Permissions and publication gates
 
-In `tofrie/pystove` → Settings → Environments, create **pypi**:
+- Both authorization and publication require `workflow_dispatch`, repository
+  `tofrie/pystove`, branch `release/saynwerk-pystove-0.3.0rc3`, `mode=publish`,
+  and the exact confirmation above. Ordinary pushes/PRs cannot publish.
+- Verification and authorization have only `contents: read` and `actions: read`.
+  The built-in GitHub token is used for GitHub reads, never PyPI authentication.
+- Only the publish job has `id-token: write`, with Environment **pypi**. It has
+  no source checkout, package installation or build. Actions are pinned by SHA.
+  The official PyPA action uploads to production PyPI via Trusted Publishing/OIDC.
+- No PyPI token/repository secret, tag/release trigger, `workflow_run`,
+  `pull_request_target`, TestPyPI upload, or `skip-existing` is used.
+  Publication has a fixed concurrency group and PyPI attestations enabled.
+  Partial upload/failure requires inspection, not an automatic retry.
 
-1. Required reviewers and **Prevent self-review** are optional, not publication
-   prerequisites. This project uses a single-maintainer release process; the
-   explicit manual dispatch and exact confirmation provide release approval.
-2. Disable administrator bypass of deployment protection rules. The REST
-   Environment response does not expose this UI setting; the release maintainer
-   must verify it explicitly before dispatching publication.
-3. Under selected deployment branches/tags, permit exactly the **branch**
-   `release/saynwerk-pystove-0.3.0rc1`; no tags, wildcards or additional rules.
-4. Do not create any PyPI API-token secrets.
+## Manual Environment rule change required
 
-The authorization job fails on a missing environment or any other deployment
-branch policy. It never creates an environment as a fallback. Optional reviewer
-rules, if configured in GitHub, still apply there; the workflow does not remove
-or bypass them. Repository administrators can still edit workflow or environment
-policy; review changes to these files and the release branch and recheck policy
-before manual publication.
+In **tofrie/pystove → Settings → Environments → pypi → Deployment branches and
+tags**, keep **Selected branches and tags** and replace the sole Branch rule:
 
-The current default branch is `master`. GitHub's manual-run UI requires the
-workflow on the default branch. Do not merge the release runtime into master
-merely to obtain the button. A separately approved workflow/tooling-only change
-can register it there, then select the release branch for dispatch. Once the
-workflow is registered, the CLI/API may also permit explicit branch dispatch;
-verify-only dispatch is the safe check. No default-branch change is made here.
+- old: `release/saynwerk-pystove-0.3.0rc2`
+- new: **`release/saynwerk-pystove-0.3.0rc3`**, type **Branch**
 
-## Exact PyPI pending publisher (enter manually)
+There must be exactly this one rule: no tags, wildcards or extra branches.
+Keep administrator bypass disabled. Independent required reviewers and Prevent
+self-review are not prerequisites for this single-maintainer process. Any
+optional reviewer rules still apply; the workflow does not bypass or remove them.
+The authorization job reads existing policy and fails closed; it never creates
+or changes an Environment. These settings are not changed during preparation.
 
-Sign into the intended PyPI owner account, open **Publishing** → add a pending
-GitHub publisher (https://pypi.org/manage/account/publishing/):
+The existing PyPI project/publisher remains: owner `tofrie`, repository `pystove`,
+workflow filename `publish-pypi.yml`, Environment `pypi`. No new pending publisher,
+project reservation, credentials or account changes are needed for rc3.
 
-| Field | Value |
-| --- | --- |
-| PyPI project name | `saynwerk-pystove` |
-| GitHub owner | `tofrie` |
-| Repository | `pystove` |
-| Workflow filename | `publish-pypi.yml` (filename only) |
-| Environment | `pypi` |
+## Safe verification and later authorization
 
-Pending publishers do not reserve or create the project before their first
-successful upload. No agent-side PyPI setting or registration is performed.
-
-## Safe verification and final authorization
-
-A verify-only dispatch, once available:
+The registered workflow supports an explicit branch dispatch:
 
 ```sh
 gh workflow run publish-pypi.yml --repo tofrie/pystove \
-  --ref release/saynwerk-pystove-0.3.0rc1 -f mode=verify
+  --ref release/saynwerk-pystove-0.3.0rc3 -f mode=verify
 ```
 
-Before the first upload, require explicit user authorization naming
-`saynwerk-pystove==0.3.0rc1`, source `ca58cb39c0c5eb800156f1ffb8b43b373a3391c3`,
-both hashes above and the reviewed workflow commit. Only then may a human select
-`mode=publish` and supply the confirmation string. Review the green verification
-job and immutable hashes before the single maintainer dispatches publication.
-No independent reviewer is required. No publish-mode dispatch or environment
-approval is part of this preparation.
-
-References: [PyPI publishing](https://docs.pypi.org/trusted-publishers/using-a-publisher/),
-[pending publishers](https://docs.pypi.org/trusted-publishers/creating-a-project-through-oidc/),
-[GitHub environments](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments),
-[manual dispatch](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_dispatch).
+Record the exact workflow commit and successful manual VERIFY run ID. Download
+its artifact and independently compare both hashes. Before any publish dispatch,
+obtain separate user authorization naming rc3, that workflow commit, VERIFY run
+ID, source commit and the two approved hashes. Recheck the branch HEAD and
+Environment rule. If the artifact expires or the workflow changes, run VERIFY
+again and obtain authorization for the applicable commit/run; do not rebuild in
+publish mode. No publish dispatch is part of this preparation.
